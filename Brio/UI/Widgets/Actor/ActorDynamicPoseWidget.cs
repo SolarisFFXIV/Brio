@@ -1,0 +1,316 @@
+﻿using Brio.Capabilities.Actor;
+using Brio.Game.Actor;
+using Brio.UI.Controls.Stateless;
+using Brio.UI.Widgets.Core;
+using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
+using Dalamud.Interface.Utility.Raii;
+using System.Numerics;
+
+namespace Brio.UI.Widgets.Actor;
+
+public class ActorDynamicPoseWidget(ActorDynamicPoseCapability capability) : Widget<ActorDynamicPoseCapability>(capability)
+{
+    public override string HeaderName => "Dynamic Face Control";
+
+    public override WidgetFlags Flags => Capability.Actor.IsProp ? WidgetFlags.CanHide :
+        WidgetFlags.DefaultOpen | WidgetFlags.DrawBody;
+
+    bool eyes = false;
+    bool body = false;
+    bool head = false;
+
+    bool eyesLock = false;
+    bool bodyLock = false;
+    bool headLock = false;
+
+    int selected = -1;
+    Vector3 cameraVector3;
+    public override void DrawBody()
+    {
+        if(Capability.Camera is not null)
+            cameraVector3 = Capability.Camera.RealPosition;
+
+        if(ImBrio.ToggelButton("Enable Face Control", Capability.IsEnabled))
+        {
+            Capability.IsEnabled = !Capability.IsEnabled;
+
+            if(Capability.IsEnabled)
+            {
+                Capability.StartLookAt();
+                Reset();
+                Capability.SetTargetLock(false, LookAtTargetType.All, cameraVector3);
+            }
+            else
+            {
+                Capability.StopLookAt();
+                selected = -1;
+            }
+        }
+
+        using(ImRaii.Disabled(!Capability.IsEnabled))
+        {
+            ImGui.Separator();
+         
+            ImBrio.VerticalPadding(5);
+
+            if(ImBrio.ButtonSelectorStrip("DynamicFaceControlSelector", new Vector2(ImBrio.GetRemainingWidth(), ImBrio.GetLineHeight()), ref selected, ["Camera", "Position", "Actor"]))
+            {
+                Reset();
+
+                Capability.SetTargetLock(false, LookAtTargetType.All, cameraVector3);
+
+                switch(selected)
+                {
+                    case 0:
+                        Capability.SetMode(LookAtTargetMode.Camera);
+                        break;
+                    case 1:
+                        Capability.SetMode(LookAtTargetMode.Position);
+                        break;
+                    case 2:
+                        Capability.SetMode(LookAtTargetMode.Target);
+                        break;
+                }
+            }
+           
+          
+            switch(selected)
+            {
+                case 0:
+                    ImBrio.VerticalPadding(5);
+                    DrawCamera();
+                    ImBrio.VerticalPadding(5);
+                    break;
+                case 1:
+                    ImBrio.VerticalPadding(5);
+                    DrawPosition();
+                    ImBrio.VerticalPadding(5);
+                    break;
+                case 2:
+                    ImBrio.VerticalPadding(5);
+                    DrawActor();
+                    ImBrio.VerticalPadding(5);
+                    break;
+                default:
+                    ImBrio.VerticalPadding(5);
+                    break;
+            }
+
+        }
+    }
+
+    public void Reset()
+    {
+        eyes = false;
+        body = false;
+        head = false;
+
+        eyesLock = false;
+        bodyLock = false;
+        headLock = false;
+    }
+
+    public void DrawActor()
+    {
+        ImBrio.CenterNextElementWithPadding(75);
+        if(ImGui.BeginCombo($"###actorsWidget_{Capability.Entity.Id}_list", Capability.SelectedActorName))
+        {
+            foreach(var value in Capability.EntityManager.TryGetAllActors())
+            {
+                if(value == Capability.Actor)
+                    continue;
+
+                if(ImGui.Selectable($"[ {value.FriendlyName} ]"))
+                {
+                    Capability.SetTargetType(LookAtTargetType.All);
+
+                    Capability.SetActorTarget(true, LookAtTargetType.All, value.GameObject.GameObjectId);
+
+                    Capability.SelectedActorName = value.FriendlyName;
+                    Capability.IsSelectingActor = true;
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        ImGui.SameLine();
+
+        if(ImBrio.FontIconButtonRight("reset_selected", FontAwesomeIcon.Undo, 1f, "Reset Selected Actor", Capability.IsSelectingActor))
+        {
+            Capability.SetMode(LookAtTargetMode.None);
+
+            Capability.SetTargetType(LookAtTargetType.None);
+
+            Capability.SetActorTarget(false, LookAtTargetType.All, 0);
+
+            Capability.IsSelectingActor = false;
+            Capability.SelectedActorName = "Select an actor to track";
+        }
+    }
+
+    public void DrawCamera()
+    {
+        (bool changed, bool active) df3h;
+        using(ImRaii.Disabled(true))
+            df3h = ImBrio.DragFloat3Simple($"###dynamicFaceControlSelector_drag3", ref cameraVector3, 1);
+
+        var size = ImBrio.GetRemainingWidth() / 3;
+        (bool eyetoggle, bool eyelock) = ImBrio.ToggleLock("Eyes", size, ref eyes, ref eyesLock, disableOnLock: true);
+        ImGui.SameLine();
+        (bool bodytoggle, bool bodylock) = ImBrio.ToggleLock("Body", size, ref body, ref bodyLock, disableOnLock: true);
+        ImGui.SameLine();
+        (bool headtoggle, bool headlock) = ImBrio.ToggleLock("Head", size, ref head, ref headLock, disableOnLock: true);
+
+        if(eyetoggle || bodytoggle || headtoggle)
+        {
+            LookAtTargetType lookAtTarget = default;
+            if(body)
+                lookAtTarget |= LookAtTargetType.Body;
+            if(head)
+                lookAtTarget |= LookAtTargetType.Head;
+            if(eyes)
+                lookAtTarget |= LookAtTargetType.Eyes;
+
+            Capability.SetTargetType(lookAtTarget);
+        }
+
+        if(eyelock || bodylock || headlock)
+        {
+            if(eyelock)
+                if(eyesLock)
+                    Capability.SetTargetLock(true, LookAtTargetType.Eyes, cameraVector3);
+                else
+                    Capability.SetTargetLock(false, LookAtTargetType.Eyes, Capability.GetData()?.HeadTarget ?? cameraVector3);
+
+            if(bodylock)
+                if(bodyLock)
+                    Capability.SetTargetLock(true, LookAtTargetType.Body, cameraVector3);
+                else
+                    Capability.SetTargetLock(false, LookAtTargetType.Body, Capability.GetData()?.BodyTarget ?? cameraVector3);
+
+            if(headlock)
+                if(headLock)
+                    Capability.SetTargetLock(true, LookAtTargetType.Head, cameraVector3);
+                else
+                    Capability.SetTargetLock(false, LookAtTargetType.Head, Capability.GetData()?.HeadTarget ?? cameraVector3);
+        }
+    }
+
+    Vector3 eyesVector3;
+    Vector3 bodyVector3;
+    Vector3 headVector3;
+    public void DrawPosition()
+    {
+        (bool changed, bool active) eyesVectorDrag;
+        (bool changed, bool active) bodyVectorDrag;
+        (bool changed, bool active) headVectorDrag;
+
+        bool eyetoggle = false;
+        bool bodytoggle = false;
+        bool headtoggle = false;
+
+        if(ImBrio.ToggelButton($"Eyes###toggleButton_Eyes", new Vector2(53, 25), eyes))
+        {
+            eyetoggle = true;
+            eyes = !eyes;
+        }
+
+        ImGui.SameLine();
+
+        using(ImRaii.Disabled(!eyes))
+        {
+            if(ImBrio.FontIconButton("###dynamicFaceControlSelector_Eyes_button", FontAwesomeIcon.LocationCrosshairs, "Set to camera value"))
+            {
+                eyesVector3 = cameraVector3;
+                Capability.SetTargetLock(true, LookAtTargetType.Eyes, eyesVector3);
+                eyesLock = true;
+            }
+            ImGui.SameLine();
+            eyesVectorDrag = ImBrio.DragFloat3Simple($"###dynamicFaceControlSelector_Eyes_drag3", ref eyesVector3, 1);
+        }
+
+        if(ImBrio.ToggelButton($"Body###toggleButton_Body", new Vector2(53, 25), body))
+        {
+            bodytoggle = true;
+            body = !body;
+        }
+
+        ImGui.SameLine();
+
+        using(ImRaii.Disabled(!body))
+        {
+            if(ImBrio.FontIconButton("###dynamicFaceControlSelector_Body_button", FontAwesomeIcon.LocationCrosshairs, "Set to camera value"))
+            {
+                bodyVector3 = cameraVector3;
+                Capability.SetTargetLock(true, LookAtTargetType.Body, bodyVector3);
+                bodyLock = true;
+            }
+            ImGui.SameLine();
+            bodyVectorDrag = ImBrio.DragFloat3Simple($"###dynamicFaceControlSelector_Body_drag3", ref bodyVector3, 1);
+        }
+
+        if(ImBrio.ToggelButton($"Head###toggleButton_Head", new Vector2(53, 25), head))
+        {
+            headtoggle = true;
+            head = !head;
+        }
+        ImGui.SameLine();
+
+        using(ImRaii.Disabled(!head))
+        {
+            if(ImBrio.FontIconButton("###dynamicFaceControlSelector_Head_button", FontAwesomeIcon.LocationCrosshairs, "Set to camera value"))
+            {
+                headVector3 = cameraVector3;
+                Capability.SetTargetLock(true, LookAtTargetType.Head, headVector3);
+                headLock = true;
+            }
+            ImGui.SameLine();
+            headVectorDrag = ImBrio.DragFloat3Simple($"###dynamicFaceControlSelector_Head_drag3", ref headVector3, 1);
+        }
+
+        if(headVectorDrag.changed || headVectorDrag.active)
+        {
+            Capability.SetTargetLock(true, LookAtTargetType.Head, headVector3);
+            headLock = true;
+        }
+
+        if(bodyVectorDrag.changed || bodyVectorDrag.active)
+        {
+            Capability.SetTargetLock(true, LookAtTargetType.Body, bodyVector3);
+            bodyLock = true;
+        }
+
+        if(eyesVectorDrag.changed || eyesVectorDrag.active)
+        {
+            Capability.SetTargetLock(true, LookAtTargetType.Eyes, eyesVector3);
+            eyesLock = true;
+        }
+
+        if(eyetoggle || bodytoggle || headtoggle)
+        {
+            LookAtTargetType lookAtTarget = default;
+            if(body)
+                lookAtTarget |= LookAtTargetType.Body;
+            if(head)
+                lookAtTarget |= LookAtTargetType.Head;
+            if(eyes)
+                lookAtTarget |= LookAtTargetType.Eyes;
+
+            Capability.SetTargetType(lookAtTarget);
+        }
+
+        var data = Capability.GetData();
+        if(data is not null)
+        {
+            headVector3 = data.HeadTarget;
+            bodyVector3 = data.BodyTarget;
+            eyesVector3 = data.EyesTarget;
+        }
+    }
+
+    public override void ToggleAdvancedWindow()
+    {
+
+    }
+}

@@ -1,0 +1,1366 @@
+﻿using Brio.Capabilities.Posing;
+using Brio.Capabilities.World;
+using Brio.Config;
+using Brio.Core;
+using Brio.Entities;
+using Brio.Entities.Actor;
+using Brio.Entities.Core;
+using Brio.Entities.World;
+using Brio.Game.Camera;
+using Brio.Game.GPose;
+using Brio.Game.Posing;
+using Brio.Game.World;
+using Brio.Capabilities.Actor;
+using Brio.Input;
+using Brio.Services;
+using Brio.UI.Controls.Editors;
+using Dalamud.Bindings.ImGui;
+using Dalamud.Bindings.ImGuizmo;
+using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
+using Dalamud.Interface.Windowing;
+using Dalamud.Plugin.Services;
+using OneOf.Types;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+
+namespace Brio.UI.Windows.Specialized;
+
+
+// There is code here from Hyperborea (https://github.com/kawaii/Hyperborea) not being used yet
+
+public class PosingOverlayWindow : Window, IDisposable
+{
+    private readonly EntityManager _entityManager;
+    private readonly CameraService _cameraService;
+    private readonly ConfigurationService _configurationService;
+    private readonly PosingService _posingService;
+    private readonly GPoseService _gPoseService;
+    private readonly HistoryService _groupedUndoService;
+
+    private readonly LightingService _lightingService;
+
+    private readonly IGameGui _gameGui;
+
+    private List<ClickableItem> _selectingFrom = [];
+    private Transform? _trackingTransform;
+    private readonly PosingTransformEditor _posingTransformEditor = new();
+    private List<(EntityId id, PoseInfo info, Transform model)>? _groupedPendingSnapshot = null;
+
+    private const int _gizmoId = 142857;
+    private const string _boneSelectPopupName = "brio_bone_select_popup";
+
+    public PosingOverlayWindow(EntityManager entityManager, IGameGui gameGui, CameraService cameraService, LightingService lightingService, HistoryService groupedUndoService, ConfigurationService configService, PosingService posingService, GPoseService gPoseService)
+        : base("##brio_posing_overlay_window", ImGuiWindowFlags.AlwaysAutoResize, true)
+    {
+        Namespace = "brio_posing_overlay_namespace";
+
+        IsOpen = configService.Configuration.Posing.OverlayDefaultsOn;
+
+        _entityManager = entityManager;
+        _cameraService = cameraService;
+        _configurationService = configService;
+        _posingService = posingService;
+        _gPoseService = gPoseService;
+        _groupedUndoService = groupedUndoService;
+        _lightingService = lightingService;
+
+        _gameGui = gameGui;
+
+        _gPoseService.OnGPoseStateChange += OnGPoseStateChanged;
+    }
+
+    public override void PreDraw()
+    {
+        base.PreDraw();
+        ImGuiHelpers.SetNextWindowPosRelativeMainViewport(new Vector2(0, 0), ImGuiCond.Always);
+        SizeCondition = ImGuiCond.Always;
+
+        var io = ImGui.GetIO();
+        Size = io.DisplaySize * ImGui.GetFontSize();
+
+        Flags = ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoCollapse;
+
+        ImGuizmo.SetID(_gizmoId);
+
+        //if(_trackingTransform.HasValue)
+        //{
+        //    Flags &= ~ImGuiWindowFlags.NoInputs;
+        //}
+    }
+
+    public override void Draw()
+    {
+        var overlayConfig = _configurationService.Configuration.Posing;
+        var uiState = new OverlayUIState(overlayConfig);
+
+        for(int i = 0; i < _lightingService.SpawnedLightEntities.Count; i++)
+        {
+            var lightEntity = _lightingService.SpawnedLightEntities[i];
+            if(lightEntity is not null)
+            {
+                if(lightEntity.TryGetCapability<LightTransformCapability>(out var lightCap))
+                {
+                    DrawLightContent(lightCap, overlayConfig, uiState);
+                    DrawLightGizmo(lightCap, uiState);
+                }
+            }
+        }
+
+        if(!_entityManager.TryGetCapabilityFromSelectedEntity<PosingCapability>(out var posing))
+        {
+            return;
+        }
+
+        DrawActorSelectionDots(overlayConfig, uiState);
+
+        if(_posingService.ShowBonesForAllVisibleActors)
+        {
+            DrawOtherActorBones(posing, uiState, overlayConfig);
+        }
+        
+        DrawActorContent(posing, uiState, overlayConfig);
+     
+        //var pos = ImGui.GetMousePos();
+        //if(_gameGui.ScreenToWorld(pos, out var res))
+        //{
+        //    var col = Get(EColor.RedBright, EColor.YellowBright);
+        //    DrawRingWorld(res, 0.5f, col.ToUint(), 1f);
+        //    var l = MathF.Sqrt(1f) / 2f * 0.5f;
+        //    DrawLineWorld(res + new Vector3(-l, 0, -l), res + new Vector3(l, 0, l), col.ToUint(), 2f);
+        //    DrawLineWorld(res + new Vector3(l, 0, -l), res + new Vector3(-l, 0, l), col.ToUint(), 2f);
+        //}
+    }
+
+    public override void PostDraw()
+    {
+        ImGuizmo.SetID(0);
+        base.PostDraw();
+    }
+
+    private unsafe void DrawActorSelectionDots(PosingConfiguration config, OverlayUIState uiState)
+    {
+        var camera = _cameraService.GetCurrentCamera();
+        if(camera == null)
+            return;
+
+        var cameraViewMatrix = camera->GetViewMatrix();
+
+        var actorClickables = new List<(ClickableItem clickable, ActorEntity entity)>();
+
+        // Get all actors
+        foreach(var actorEntity in _entityManager.TryGetAllActors())
+        {
+            if(!actorEntity.TryGetCapability<PosingCapability>(out var posingCap))
+                continue;
+
+            var actorPosition = posingCap.ModelPosing.Transform.Position;
+
+            // Check if the actor's position is in front of camera, skip if not
+            if(Vector3.Transform(actorPosition, cameraViewMatrix).Z < 0)
+            {
+                if(camera->WorldToScreen(actorPosition, out var actorScreen))
+                {
+                    var actorClickable = new ClickableItem
+                    {
+                        Name = actorEntity.FriendlyName,
+                        ScreenPosition = ImGui.GetMainViewport().Pos + actorScreen,
+                        Size = config.BoneCircleSize,
+                        CurrentlySelected = _entityManager.SelectedEntityIds.Contains(actorEntity.Id)
+                    };
+                    actorClickables.Add((actorClickable, actorEntity));
+                }
+            }
+        }
+
+        var clicked = new List<(ClickableItem clickable, ActorEntity entity)>();
+        var hovered = new List<(ClickableItem clickable, ActorEntity entity)>();
+
+        bool isMultiSelectModifier = ImGui.GetIO().KeyCtrl || ImGui.GetIO().KeyShift;
+
+        foreach(var (clickable, entity) in actorClickables)
+        {
+            var start = new Vector2(clickable.ScreenPosition.X - clickable.Size, clickable.ScreenPosition.Y - clickable.Size);
+            var end = new Vector2(clickable.ScreenPosition.X + clickable.Size, clickable.ScreenPosition.Y + clickable.Size);
+
+            if(ImGui.IsMouseHoveringRect(start, end))
+            {
+                hovered.Add((clickable, entity));
+
+                clickable.CurrentlyHovered = true;
+
+                ImGui.SetNextFrameWantCaptureMouse(true);
+
+                if(ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+                {
+                    clicked.Add((clickable, entity));
+                    clickable.WasClicked = true;
+                    uiState.AnyClickableClicked = true;
+                }
+            }
+
+            bool isFilled = clickable.CurrentlySelected || clickable.CurrentlyHovered;
+
+            var color = config.ModelTransformCircleStandOutColor;
+
+            if(clickable.CurrentlyHovered)
+                color = config.BoneCircleHoveredColor;
+
+            if(clickable.CurrentlySelected)
+                color = config.BoneCircleSelectedColor;
+
+            if(isFilled)
+                ImGui.GetWindowDrawList().AddCircleFilled(clickable.ScreenPosition, clickable.Size + 3, color, 8);
+            else
+                ImGui.GetWindowDrawList().AddCircle(clickable.ScreenPosition, clickable.Size, color, 8, 2);
+        }
+
+        if(clicked.Count != 0)
+        {
+            if(isMultiSelectModifier)
+            {
+                foreach(var (_, entity) in clicked)
+                {
+                    if(_entityManager.SelectedEntityIds.Contains(entity.Id))
+                    {
+                        _entityManager.RemoveSelectedEntity(entity.Id);
+                    }
+                    else
+                    {
+                        _entityManager.AddSelectedEntity(entity.Id);
+                    }
+                }
+            }
+            else
+            {
+                _entityManager.SetSelectedEntity(clicked[0].entity.Id);
+            }
+        }
+
+        // Show tooltip on hover
+        if(hovered.Count != 0 && clicked.Count == 0)
+        {
+            ImGui.SetNextWindowPos(ImGui.GetMousePos() + new Vector2(15, 10), ImGuiCond.Always);
+
+            if(ImGui.Begin("gizmo_actor_select_preview", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoMove))
+            {
+                foreach(var (hover, _) in hovered)
+                {
+                    ImGui.BeginDisabled();
+                    ImGui.Selectable($"{hover.Name}###selectable_{hover.GetHashCode()}", hover.CurrentlySelected);
+                    ImGui.EndDisabled();
+                }
+
+                ImGui.End();
+            }
+        }
+    }
+
+    private unsafe void DrawLightContent(LightTransformCapability lightCapability, PosingConfiguration config, OverlayUIState uiState)
+    {
+        var camera = _cameraService.GetCurrentCamera();
+        if(camera == null)
+            return;
+
+        var cameraViewMatrix = camera->GetViewMatrix();
+
+        var overlayConfig = _configurationService.Configuration.Posing;
+        var light = lightCapability.GameLight;
+        var clickables = new List<ClickableItem>();
+
+        // Check if the light's position is in front of camera, skip if not
+        if(Vector3.Transform(light.Position, cameraViewMatrix).Z < 0)
+        {
+            if(camera->WorldToScreen(light.Position, out var modelScreen))
+            {
+                var lightClickable = new ClickableItem
+                {
+                    Name = lightCapability.Entity.FriendlyName,
+                    ScreenPosition = ImGui.GetMainViewport().Pos + modelScreen,
+                    Size = overlayConfig.BoneCircleSize,
+                    CurrentlySelected = _lightingService.SelectedLightEntity?.GameLight.EntityIndex == light.EntityIndex
+                };
+                clickables.Add(lightClickable);
+            }
+        }
+
+        var clicked = new List<ClickableItem>();
+        var hovered = new List<ClickableItem>();
+
+        foreach(var clickable in clickables)
+        {
+            var start = new Vector2(clickable.ScreenPosition.X - clickable.Size, clickable.ScreenPosition.Y - clickable.Size);
+            var end = new Vector2(clickable.ScreenPosition.X + clickable.Size, clickable.ScreenPosition.Y + clickable.Size);
+
+            if(ImGui.IsMouseHoveringRect(start, end))
+            {
+                hovered.Add(clickable);
+
+                clickable.CurrentlyHovered = true;
+
+                ImGui.SetNextFrameWantCaptureMouse(true);
+
+                if(ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+                {
+                    _lightingService.SelectedLightEntity = lightCapability.Entity as LightEntity;
+
+                    clicked.Add(clickable);
+                    clickable.WasClicked = true;
+                    uiState.AnyClickableClicked = true;
+                }
+            }
+
+            bool isFilled = clickable.CurrentlySelected || clickable.CurrentlyHovered;
+
+            var color = config.LightCircleHoveredColor;
+
+            if(clickable.CurrentlyHovered)
+                color = config.LightCircleHoveredColor;
+
+            if(clickable.CurrentlySelected)
+                color = config.LightCircleSelectedColor;
+
+            if(isFilled)
+                ImGui.GetWindowDrawList().AddCircleFilled(clickable.ScreenPosition, clickable.Size + 3, color, 8);
+            else
+                ImGui.GetWindowDrawList().AddCircle(clickable.ScreenPosition, clickable.Size, color, 8, 2);
+        }
+
+        if(hovered.Count != 0 && clicked.Count == 0)
+        {
+            ImGui.SetNextWindowPos(ImGui.GetMousePos() + new Vector2(15, 10), ImGuiCond.Always);
+            if(ImGui.Begin("gizmo_light_select_preview", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoMove))
+            {
+                foreach(var hover in hovered)
+                {
+                    ImGui.BeginDisabled();
+                    ImGui.Selectable($"{hover.Name}###selectable_{hover.GetHashCode()}", hover.CurrentlySelected);
+                    ImGui.EndDisabled();
+                }
+
+                ImGui.End();
+            }
+        }
+    }
+
+    private unsafe void DrawActorContent(PosingCapability posing, OverlayUIState uiState, PosingConfiguration overlayConfig)
+    {
+        var clickables = new List<ClickableItem>();
+
+        CalculateClickables(posing, uiState, overlayConfig, ref clickables);
+
+        HandleSkeletonInput(posing, uiState, clickables);
+        DrawPopup(posing);
+        DrawSkeletonLines(uiState, overlayConfig, clickables, _posingService);
+        DrawSkeletonDots(uiState, overlayConfig, clickables, _posingService);
+        DrawGizmo(posing, uiState);
+    }
+
+    private void DrawOtherActorBones(PosingCapability selectedPosing, OverlayUIState uiState, PosingConfiguration overlayConfig)
+    {
+        foreach(var actor in _entityManager.TryGetAllActors())
+        {
+            if(actor.Id.Equals(selectedPosing.Entity.Id))
+                continue;
+
+            if(actor.TryGetCapability<ActorAppearanceCapability>(out var appearance) && appearance.IsHidden)
+                continue;
+
+            if(!actor.TryGetCapability<PosingCapability>(out var posing))
+                continue;
+
+            var clickables = new List<ClickableItem>();
+            CalculateClickables(posing, uiState, overlayConfig, ref clickables);
+            HandleSkeletonInputForActor(actor, posing, uiState, clickables);
+            DrawSkeletonLines(uiState, overlayConfig, clickables, _posingService);
+            DrawSkeletonDots(uiState, overlayConfig, clickables, _posingService);
+        }
+    }
+
+    private void HandleSkeletonInputForActor(ActorEntity actor, PosingCapability posing, OverlayUIState uiState, List<ClickableItem> clickables)
+    {
+        if(!uiState.SkeletonInputEnabled)
+            return;
+
+        var clicked = new List<ClickableItem>();
+        var hovered = new List<ClickableItem>();
+
+        bool isMultiSelectModifier = ImGui.GetIO().KeyCtrl || ImGui.GetIO().KeyShift;
+
+        foreach(var clickable in clickables)
+        {
+            var start = new Vector2(clickable.ScreenPosition.X - clickable.Size, clickable.ScreenPosition.Y - clickable.Size);
+            var end = new Vector2(clickable.ScreenPosition.X + clickable.Size, clickable.ScreenPosition.Y + clickable.Size);
+            if(ImGui.IsMouseHoveringRect(start, end))
+            {
+                hovered.Add(clickable);
+                clickable.CurrentlyHovered = true;
+                uiState.AnyClickableHovered = true;
+
+                ImGui.SetNextFrameWantCaptureMouse(true);
+
+                if(ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+                {
+                    clicked.Add(clickable);
+                    clickable.WasClicked = true;
+                    uiState.AnyClickableClicked = true;
+                }
+            }
+        }
+
+        if(clicked.Count != 0)
+        {
+            _entityManager.SetSelectedEntity(actor);
+
+            posing.Selected = clicked[0].Item;
+
+            if(clicked[0].Item.Value is BonePoseInfoId boneId)
+            {
+                posing.SetBoneSelection(boneId, isMultiSelectModifier);
+            }
+            else if(clicked[0].Item.Value is ModelTransformSelection)
+            {
+                if(!isMultiSelectModifier)
+                {
+                    posing.SelectedBones.Clear();
+                }
+            }
+
+            if(clicked.Count > 1)
+            {
+                _selectingFrom = clicked;
+                ImGui.OpenPopup(_boneSelectPopupName);
+            }
+        }
+
+        if(hovered.Count != 0 && clicked.Count == 0)
+        {
+            ImGui.SetNextWindowPos(ImGui.GetMousePos() + new Vector2(15, 10), ImGuiCond.Always);
+            if(ImGui.Begin("gizmo_bone_select_preview", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoMove))
+            {
+                foreach(var hover in hovered)
+                {
+                    ImGui.BeginDisabled();
+                    ImGui.Selectable($"{hover.Item.DisplayName}###selectable_{hover.GetHashCode()}", hover.CurrentlySelected);
+                    ImGui.EndDisabled();
+                }
+
+                ImGui.End();
+            }
+        }
+    }
+
+    private unsafe void CalculateClickables(PosingCapability posing, OverlayUIState uiState, PosingConfiguration config, ref List<ClickableItem> clickables)
+    {
+        var camera = _cameraService.GetCurrentCamera();
+        if(camera == null)
+            return;
+
+        var cameraViewMatrix = camera->GetViewMatrix();
+
+        // Model Transform
+
+        // Check if the model's position is in front of camera, skip if not
+        if(Vector3.Transform(posing.ModelPosing.Transform.Position, cameraViewMatrix).Z < 0)
+        {
+            if(camera->WorldToScreen(posing.ModelPosing.Transform.Position, out var modelScreen))
+            {
+                var modelTransform = new ClickableItem
+                {
+                    Item = PosingSelectionType.ModelTransform,
+                    ScreenPosition = ImGui.GetMainViewport().Pos + modelScreen,
+                    Size = config.BoneCircleSize,
+                };
+                clickables.Add(modelTransform);
+                modelTransform.CurrentlySelected = posing.Selected.Equals(modelTransform);
+            }
+        }
+
+        // Bone Transforms
+        if(posing.Actor.IsProp == false)
+        {
+            BonePoseInfoId? selectedBoneId = null;
+            if(posing.Selected.Value is BonePoseInfoId boneId)
+                selectedBoneId = boneId;
+
+            foreach(var (skeleton, poseSlot) in posing.SkeletonPosing.Skeletons)
+            {
+                if(!skeleton.IsValid)
+                    continue;
+
+                var charaBase = skeleton.CharacterBase;
+                if(charaBase == null)
+                    continue;
+
+                var modelMatrix = new Transform()
+                {
+                    Position = (Vector3)charaBase->CharacterBase.DrawObject.Object.Position,
+                    Rotation = (Quaternion)charaBase->CharacterBase.DrawObject.Object.Rotation,
+                    Scale = (Vector3)charaBase->CharacterBase.DrawObject.Object.Scale * charaBase->ScaleFactor
+                }.ToMatrix();
+
+                foreach(var bone in skeleton.Bones)
+                {
+                    var boneWorldPosition = Vector3.Transform(bone.LastTransform.Position, modelMatrix);
+
+                    // Check if the bone position is in front of camera, skip if not
+                    if(Vector3.Transform(boneWorldPosition, cameraViewMatrix).Z >= 0)
+                        continue;
+
+                    var bonePoseId = posing.SkeletonPosing.GetBonePose(bone).Id;
+                    bool isSelectedBone = selectedBoneId != null && selectedBoneId.Value.Equals(bonePoseId);
+                    bool isMultiSelected = posing.IsBoneSelected(bonePoseId);
+
+                    // Always show the selected bone, even if the overlay filter would hide it
+                    if((!_posingService.OverlayFilter.IsBoneValid(bone, poseSlot)) && !isSelectedBone && !isMultiSelected)
+                        continue;
+
+                    if(camera->WorldToScreen(boneWorldPosition, out var boneScreen))
+                    {
+                        var clickItem = new ClickableItem
+                        {
+                            Item = bonePoseId,
+                            ScreenPosition = ImGui.GetMainViewport().Pos + boneScreen,
+                            Size = config.BoneCircleSize,
+                            CurrentlySelected = isSelectedBone || isMultiSelected
+                        };
+                        clickables.Add(clickItem);
+
+                        if(bone.Parent != null)
+                        {
+                            if(!_posingService.OverlayFilter.IsBoneValid(bone.Parent, poseSlot))
+                                continue;
+
+                            var parentWorldPosition = Vector3.Transform(bone.Parent.LastTransform.Position, modelMatrix);
+                            if(camera->WorldToScreen(parentWorldPosition, out var parentScreen))
+                            {
+                                clickables.Last().ParentScreenPosition = ImGui.GetMainViewport().Pos + parentScreen;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    private void HandleSkeletonInput(PosingCapability posing, OverlayUIState uiState, List<ClickableItem> clickables)
+    {
+        if(!uiState.SkeletonInputEnabled)
+            return;
+
+        var clicked = new List<ClickableItem>();
+        var hovered = new List<ClickableItem>();
+
+        bool isMultiSelectModifier = ImGui.GetIO().KeyCtrl || ImGui.GetIO().KeyShift;
+
+        foreach(var clickable in clickables)
+        {
+            var start = new Vector2(clickable.ScreenPosition.X - clickable.Size, clickable.ScreenPosition.Y - clickable.Size);
+            var end = new Vector2(clickable.ScreenPosition.X + clickable.Size, clickable.ScreenPosition.Y + clickable.Size);
+            if(ImGui.IsMouseHoveringRect(start, end))
+            {
+                hovered.Add(clickable);
+                clickable.CurrentlyHovered = true;
+                uiState.AnyClickableHovered = true;
+
+                ImGui.SetNextFrameWantCaptureMouse(true);
+
+                if(ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+                {
+                    clicked.Add(clickable);
+                    clickable.WasClicked = true;
+                    uiState.AnyClickableClicked = true;
+                }
+            }
+        }
+
+        if(clicked.Count != 0)
+        {
+            posing.Selected = clicked[0].Item;
+
+            if(clicked[0].Item.Value is BonePoseInfoId boneId)
+            {
+                posing.SetBoneSelection(boneId, isMultiSelectModifier);
+            }
+            else if(clicked[0].Item.Value is ModelTransformSelection)
+            {
+                if(!isMultiSelectModifier)
+                {
+                    posing.SelectedBones.Clear();
+                }
+            }
+
+            if(clicked.Count > 1)
+            {
+                _selectingFrom = clicked;
+                ImGui.OpenPopup(_boneSelectPopupName);
+            }
+        }
+
+        if(hovered.Count != 0 && clicked.Count == 0)
+        {
+            ImGui.SetNextWindowPos(ImGui.GetMousePos() + new Vector2(15, 10), ImGuiCond.Always);
+            if(ImGui.Begin("gizmo_bone_select_preview", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoMove))
+            {
+                foreach(var hover in hovered)
+                {
+                    ImGui.BeginDisabled();
+                    ImGui.Selectable($"{hover.Item.DisplayName}###selectable_{hover.GetHashCode()}", hover.CurrentlySelected);
+                    ImGui.EndDisabled();
+                }
+
+                ImGui.End();
+            }
+
+            var wheel = ImGui.GetIO().MouseWheel;
+            if(wheel != 0)
+            {
+                if(hovered.Count == 1)
+                {
+                    if(hovered[0].Item.Value is BonePoseInfoId wheelBoneId)
+                    {
+                        posing.SetBoneSelection(wheelBoneId, isMultiSelectModifier);
+                    }
+                    else
+                    {
+                        posing.Selected = hovered[0].Item;
+                        if(!isMultiSelectModifier)
+                            posing.SelectedBones.Clear();
+                    }
+                }
+                else
+                {
+                    _selectingFrom = hovered;
+                    ImGui.OpenPopup(_boneSelectPopupName);
+
+                    if(hovered[0].Item.Value is BonePoseInfoId firstBoneId)
+                    {
+                        posing.SetBoneSelection(firstBoneId, isMultiSelectModifier);
+                    }
+                    else
+                    {
+                        posing.Selected = hovered[0].Item;
+                        if(!isMultiSelectModifier)
+                            posing.SelectedBones.Clear();
+                    }
+                }
+            }
+        }
+    }
+
+    private void DrawPopup(PosingCapability posing)
+    {
+        using var popup = ImRaii.Popup(_boneSelectPopupName);
+        if(popup.Success)
+        {
+            int selectedIndex = -1;
+            bool isMultiSelectModifier = ImGui.GetIO().KeyCtrl || ImGui.GetIO().KeyShift;
+
+            foreach(var click in _selectingFrom)
+            {
+                bool isSelected = posing.Selected == click.Item;
+                bool isMultiSelected = false;
+
+                if(click.Item.Value is BonePoseInfoId boneId)
+                    isMultiSelected = posing.IsBoneSelected(boneId) && posing.SelectedBones.Count > 1;
+
+                if(isSelected)
+                    selectedIndex = _selectingFrom.IndexOf(click);
+
+                if(ImGui.Selectable($"{click.Item.DisplayName}###clickable_{click.GetHashCode()}", isSelected || isMultiSelected))
+                {
+                    if(click.Item.Value is BonePoseInfoId clickedBoneId)
+                    {
+                        posing.SetBoneSelection(clickedBoneId, isMultiSelectModifier);
+
+                    }
+                    else
+                    {
+                        posing.Selected = click.Item;
+
+                        if(!isMultiSelectModifier)
+                        {
+                            posing.SelectedBones.Clear();
+                        }
+                    }
+
+                    _selectingFrom = [];
+                    ImGui.CloseCurrentPopup();
+
+                }
+            }
+
+            var wheel = ImGui.GetIO().MouseWheel;
+            if(wheel != 0)
+            {
+                if(wheel < 0)
+                {
+                    selectedIndex++;
+                    if(selectedIndex >= _selectingFrom.Count)
+                        selectedIndex = 0;
+                }
+                else
+                {
+                    selectedIndex--;
+                    if(selectedIndex < 0)
+                        selectedIndex = _selectingFrom.Count - 1;
+                }
+
+                if(_selectingFrom[selectedIndex].Item.Value is BonePoseInfoId scrollBoneId)
+                {
+                    posing.SetBoneSelection(scrollBoneId, isMultiSelectModifier);
+                }
+                else
+                {
+                    posing.Selected = _selectingFrom[selectedIndex].Item;
+
+                    if(!isMultiSelectModifier)
+                        posing.SelectedBones.Clear();
+                }
+            }
+        }
+    }
+
+    private void DrawSkeletonLines(OverlayUIState uiState, PosingConfiguration config, List<ClickableItem> clickables, PosingService posingService)
+    {
+        if(!uiState.DrawSkeletonLines)
+            return;
+
+        foreach(var clickable in clickables)
+        {
+            if(clickable.ParentScreenPosition.HasValue)
+            {
+                float thickness = config.SkeletonLineThickness;
+                uint color = uiState.SkeletonLinesEnabled ? config.SkeletonLineActiveColor : config.SkeletonLineInactiveColor;
+
+                // Use bone category color if enabled
+                if(config.UseBoneCategoryColors && clickable.Item.Value is BonePoseInfoId bonePoseId)
+                {
+                    var categoryId = posingService.GetBoneCategoryId(bonePoseId.BoneName);
+                    if(categoryId != null && config.BoneCategoryColors.TryGetValue(categoryId, out var categoryColor))
+                    {
+                        if(uiState.SkeletonLinesEnabled)
+                            color = categoryColor;
+                    }
+                }
+
+                if(config.SkeletonLineToCircle)
+                {
+                    if(Vector2.DistanceSquared(clickable.ParentScreenPosition.Value, clickable.ScreenPosition) >= MathF.Pow(clickable.Size * 2, 2))
+                    {
+                        ImGui.GetWindowDrawList().AddLine(
+                            PointAlongLine(clickable.ParentScreenPosition.Value, clickable.ScreenPosition, clickable.Size - 1),
+                            PointAlongLine(clickable.ScreenPosition, clickable.ParentScreenPosition.Value, clickable.Size - 1),
+                            color, thickness
+                        );
+                    }
+                }
+                else
+                {
+                    ImGui.GetWindowDrawList().AddLine(clickable.ParentScreenPosition.Value, clickable.ScreenPosition, color, thickness);
+                }
+            }
+        }
+
+        static Vector2 PointAlongLine(Vector2 start, Vector2 end, float distance)
+            => start + (Vector2.Normalize(end - start) * distance);
+    }
+
+    private void DrawSkeletonDots(OverlayUIState uiState, PosingConfiguration config, List<ClickableItem> clickables, PosingService posingService)
+    {
+        if(!uiState.DrawSkeletonDots)
+            return;
+
+        foreach(var clickable in clickables)
+        {
+            bool isFilled = clickable.CurrentlySelected || clickable.CurrentlyHovered;
+
+            var color = config.BoneCircleNormalColor;
+
+            // Check if bone category colors should be used
+            if(config.UseBoneCategoryColors && clickable.Item.Value is BonePoseInfoId bonePoseId)
+            {
+                var categoryId = posingService.GetBoneCategoryId(bonePoseId.BoneName);
+                if(categoryId != null && config.BoneCategoryColors.TryGetValue(categoryId, out var categoryColor))
+                {
+                    // Use category color if the bone is not hovered or selected
+                    if(!clickable.CurrentlyHovered && !clickable.CurrentlySelected)
+                        color = categoryColor;
+                }
+            }
+
+            if(clickable.CurrentlyHovered)
+                color = config.BoneCircleHoveredColor;
+
+            if(clickable.CurrentlySelected)
+                color = config.BoneCircleSelectedColor;
+
+            if(!uiState.SkeletonDotsEnabled)
+                color = config.BoneCircleInactiveColor;
+
+            if(clickable.Item == PosingSelectionType.ModelTransform && _configurationService.Configuration.Posing.ModelTransformStandout)
+            {
+                ImGui.GetWindowDrawList().AddCircleFilled(clickable.ScreenPosition, clickable.Size + 3, config.ModelTransformCircleStandOutColor);
+                continue;
+            }
+
+            if(isFilled)
+                ImGui.GetWindowDrawList().AddCircleFilled(clickable.ScreenPosition, clickable.Size, color);
+            else
+                ImGui.GetWindowDrawList().AddCircle(clickable.ScreenPosition, clickable.Size, color);
+        }
+    }
+
+    private Transform? _lightTrackingTransform;
+    private unsafe void DrawLightGizmo(LightTransformCapability lightTransformCapability, OverlayUIState uiState)
+    {
+        if(!uiState.DrawGizmo || lightTransformCapability.GameLight.IsValid is false || lightTransformCapability.GameLight.IsVisible is false)
+            return;
+
+        if(_lightingService.SelectedLightEntity is not null && _lightingService.SelectedLightEntity == lightTransformCapability.Entity)
+        {
+            // Always draw if this is the selected light
+        }
+        else if(lightTransformCapability.IsGismoVisible is false)
+            return;
+
+        var camera = _cameraService.GetCurrentCamera();
+        if(camera == null)
+            return;
+
+        Matrix4x4 projectionMatrix = camera->GetProjectionMatrix();
+        Matrix4x4 worldViewMatrix = camera->GetViewMatrix();
+        worldViewMatrix.M44 = 1;
+
+        Transform currentTransform = lightTransformCapability.GameLight.GameLight->Transform;
+        Matrix4x4 modelMatrix = worldViewMatrix;
+
+        var lastObserved = _lightTrackingTransform ?? currentTransform;
+        var lastMatrix = lastObserved.ToMatrix();
+
+        ImGuizmo.SetID(_gizmoId + lightTransformCapability.GameLight.Index + 1);
+
+        ImGuizmo.BeginFrame();
+        var io = ImGui.GetIO();
+        ImGuizmo.SetRect(0, 0, io.DisplaySize.X, io.DisplaySize.Y);
+        ImGuizmo.SetOrthographic(false);
+        ImGuizmo.AllowAxisFlip(_configurationService.Configuration.Posing.AllowGizmoAxisFlip);
+        ImGuizmo.SetDrawlist();
+        ImGuizmo.Enable(uiState.GizmoEnabled);
+
+        Transform? newTransform = null;
+
+        if(ImGuizmoExtensions.MouseWheelManipulate(ref lastMatrix))
+        {
+            newTransform = lastMatrix.ToTransform();
+            _lightTrackingTransform = newTransform;
+        }
+
+        if(ImGuizmo.Manipulate(
+            ref worldViewMatrix,
+            ref projectionMatrix,
+            _lightingService.Operation.AsGizmoOperation(),
+            _lightingService.CoordinateMode.AsGizmoMode(),
+            ref lastMatrix
+        ))
+        {
+            newTransform = lastMatrix.ToTransform();
+            _lightTrackingTransform = newTransform;
+        }
+
+        if(_lightTrackingTransform.HasValue && !ImGuizmo.IsUsing())
+        {
+            _lightTrackingTransform = null;
+
+            lightTransformCapability.Snapshot();
+        }
+
+        ImGuizmo.Enable(true);
+
+        if(newTransform != null)
+        {
+            var delta = newTransform.Value.CalculateDiff(lastObserved);
+
+            lightTransformCapability.Transform = lightTransformCapability.GameLight.GameLight->Transform += delta;
+
+            lightTransformCapability.rotation = lightTransformCapability.Transform.Rotation.EulerAngles;
+            lightTransformCapability.position = lightTransformCapability.Transform.Position;
+
+            if(ImGuizmo.IsUsing() is false)
+                lightTransformCapability.Snapshot();
+        }
+
+        ImGuizmo.SetID(_gizmoId);
+    }
+
+    private unsafe void DrawGizmo(PosingCapability posing, OverlayUIState uiState)
+    {
+        if(!uiState.DrawGizmo)
+            return;
+
+        if(posing.Selected.Value is None)
+            return;
+
+        var camera = _cameraService.GetCurrentCamera();
+        if(camera == null)
+            return;
+
+        var selected = posing.Selected;
+
+        // Check for multi-actor selection
+        var selectedActors = new List<(ActorEntity actor, PosingCapability capability, Transform transform)>();
+
+        foreach(var entityId in _entityManager.SelectedEntityIds)
+        {
+            if(_entityManager.TryGetEntity(entityId, out var entity) &&
+               entity is ActorEntity actorEntity &&
+               actorEntity.TryGetCapability<PosingCapability>(out var cap))
+            {
+                selectedActors.Add((actorEntity, cap, cap.ModelPosing.Transform));
+            }
+        }
+
+        bool isMultiActorSelection = selectedActors.Count > 1;
+        Vector3 multiActorCentroid = Vector3.Zero;
+
+        if(isMultiActorSelection)
+        {
+            multiActorCentroid = GroupedTransformHelper.CalculateCentroid(selectedActors.Select(a => a.transform));
+        }
+
+        Matrix4x4 projectionMatrix = camera->GetProjectionMatrix();
+        Matrix4x4 worldViewMatrix = camera->GetViewMatrix();
+        worldViewMatrix.M44 = 1;
+
+        Transform currentTransform = Transform.Identity;
+        Matrix4x4 modelMatrix = worldViewMatrix;
+
+        Game.Posing.Skeletons.Bone? selectedBone = null;
+
+        var shouldDraw = selected.Match(
+            boneSelect =>
+            {
+                if(isMultiActorSelection)
+                    return false;
+
+                var bone = posing.SkeletonPosing.GetBone(boneSelect);
+                if(bone == null)
+                    return false;
+
+                if(!_posingService.OverlayFilter.IsBoneValid(bone, boneSelect.Slot) && _posingService.GizmoStaysWhenAllBonesAreDisabled is false)
+                {
+                    return false;
+                }
+
+                currentTransform = bone.LastTransform;
+
+                var charaBase = bone.Skeleton.CharacterBase;
+                if(charaBase == null)
+                    return false;
+
+                selectedBone = bone;
+                modelMatrix = new Transform()
+                {
+                    Position = (Vector3)charaBase->CharacterBase.DrawObject.Object.Position,
+                    Rotation = (Quaternion)charaBase->CharacterBase.DrawObject.Object.Rotation,
+                    Scale = Vector3.Clamp((Vector3)charaBase->CharacterBase.DrawObject.Object.Scale * charaBase->ScaleFactor, new Vector3(.5f), new Vector3(1.5f))
+                }.ToMatrix();
+
+                worldViewMatrix = Matrix4x4.Multiply(modelMatrix, worldViewMatrix);
+
+                return true;
+            },
+            _ =>
+            {
+                if(isMultiActorSelection)
+                {
+                    currentTransform = new Transform { Position = multiActorCentroid, Rotation = Quaternion.Identity, Scale = Vector3.One };
+                }
+                else
+                {
+                    currentTransform = posing.ModelPosing.Transform;
+                }
+                return true;
+            },
+            _ => false
+        );
+
+        if(!shouldDraw)
+            return;
+
+        var primaryTransform = _trackingTransform ?? currentTransform;
+        var beforeMods = primaryTransform;
+
+        var lastMatrix = primaryTransform.ToMatrix();
+
+        ImGuizmo.BeginFrame();
+        var io = ImGui.GetIO();
+        ImGuizmo.SetRect(0, 0, io.DisplaySize.X, io.DisplaySize.Y);
+        ImGuizmo.SetOrthographic(false);
+        ImGuizmo.AllowAxisFlip(_configurationService.Configuration.Posing.AllowGizmoAxisFlip);
+        ImGuizmo.SetDrawlist();
+        ImGuizmo.Enable(uiState.GizmoEnabled);
+
+        Transform? newTransform = null;
+
+        if(ImGuizmoExtensions.MouseWheelManipulate(ref lastMatrix))
+        {
+            bool canEdit = !posing.ModelPosing.Freeze && !(selectedBone != null && selectedBone.Freeze);
+
+            if(isMultiActorSelection)
+            {
+                canEdit = selectedActors.Any(a => !a.capability.ModelPosing.Freeze);
+            }
+
+            if(canEdit)
+            {
+                newTransform = lastMatrix.ToTransform();
+                _trackingTransform = newTransform;
+            }
+        }
+
+        if(ImGuizmo.Manipulate(
+            ref worldViewMatrix,
+            ref projectionMatrix,
+            _posingService.Operation.AsGizmoOperation(),
+            _posingService.CoordinateMode.AsGizmoMode(),
+            ref lastMatrix
+        ))
+        {
+            bool canEdit = !posing.ModelPosing.Freeze && !(selectedBone != null && selectedBone.Freeze);
+
+            if(isMultiActorSelection)
+            {
+                canEdit = selectedActors.Any(a => !a.capability.ModelPosing.Freeze);
+            }
+
+            if(canEdit)
+            {
+                newTransform = lastMatrix.ToTransform();
+                _trackingTransform = newTransform;
+            }
+        }
+
+        if(_trackingTransform.HasValue && !ImGuizmo.IsUsing())
+        {
+            if(_groupedPendingSnapshot != null && _groupedPendingSnapshot.Count > 0)
+            {
+                _groupedUndoService.Snapshot(_groupedPendingSnapshot);
+                _groupedPendingSnapshot = null;
+            }
+
+            foreach(var eid in _entityManager.SelectedEntityIds)
+            {
+                if(!_entityManager.TryGetEntity(eid, out var ent))
+                    continue;
+
+                if(!ent.TryGetCapability<PosingCapability>(out var cap))
+                    continue;
+
+                cap.Snapshot(false, false);
+            }
+
+            _trackingTransform = null;
+        }
+
+        ImGuizmo.Enable(true);
+
+        if(newTransform != null)
+        {
+            var delta = newTransform.Value.CalculateDiff(beforeMods);
+
+            if(isMultiActorSelection && selected.Value is ModelTransformSelection)
+            {
+                // Multi-actor model transform
+                if(_groupedPendingSnapshot == null && ImGuizmo.IsUsing())
+                {
+                    var list = new List<(EntityId, PoseInfo, Transform)>();
+                    foreach(var (actor, capability, _) in selectedActors)
+                    {
+                        list.Add((actor.Id, capability.SkeletonPosing.PoseInfo.Clone(), capability.ModelPosing.Transform));
+                    }
+                    _groupedPendingSnapshot = list;
+                }
+
+                // Apply transforms based on operation type
+                bool isRotating = _posingService.Operation == (PosingOperation.Rotate | PosingOperation.Universal) && delta.Rotation != Quaternion.Identity;
+
+                foreach(var (actor, capability, originalTransform) in selectedActors)
+                {
+                    if(capability.ModelPosing.Freeze)
+                        continue;
+
+                    Transform newActorTransform;
+
+                    if(isRotating)
+                    {
+                        // Apply rotation around centroid
+                        var rotationDelta = delta.Rotation;
+                        newActorTransform = GroupedTransformHelper.ApplyRotationDeltaAroundPivot(
+                            originalTransform,
+                            multiActorCentroid,
+                            rotationDelta
+                        );
+
+                        // Also apply any position/scale deltas
+                        if(delta.Position != Vector3.Zero)
+                            newActorTransform.Position += delta.Position;
+                        if(delta.Scale != Vector3.Zero)
+                            newActorTransform.Scale += delta.Scale;
+                    }
+                    else
+                    {
+                        // For translate and scale, apply delta directly
+                        newActorTransform = originalTransform + delta;
+                    }
+
+                    capability.ModelPosing.Transform = newActorTransform;
+                }
+
+                if(delta.Position != Vector3.Zero || delta.Rotation != Quaternion.Identity)
+                {
+                    multiActorCentroid = GroupedTransformHelper.CalculateCentroid(selectedActors.Select(a => a.capability.ModelPosing.Transform));
+                }
+            }
+            else
+            {
+                selected.Switch(
+                    bone =>
+                    {
+                        if(posing.IsMultiSelecting)
+                        {
+                            bool mirrorAlt = _configurationService.Configuration.Posing.EnableMirrorMultiBoneHotkey
+                                && InputManagerService.ActionKeysPressed(InputAction.Posing_MirrorMultiBone)
+                                && (_posingService.Operation == PosingOperation.Translate || _posingService.Operation == PosingOperation.Rotate || _posingService.Operation == PosingOperation.Universal);
+                            TransformComponents applyTo = _posingService.Operation switch
+                            {
+                                PosingOperation.Translate => TransformComponents.Position,
+                                PosingOperation.Rotate => TransformComponents.Rotation,
+                                PosingOperation.Universal => TransformComponents.Position | TransformComponents.Rotation,
+                                PosingOperation.Scale => TransformComponents.Scale,
+                                _ => TransformComponents.All
+                            };
+
+                            foreach(var selectedBoneId in posing.SelectedBones)
+                            {
+                                var targetBone = posing.SkeletonPosing.GetBone(selectedBoneId);
+                                if(targetBone != null && !targetBone.Freeze)
+                                {
+                                    if(mirrorAlt)
+                                    {
+                                        var mirrorId = selectedBoneId.GetMirrorBone();
+                                        if(mirrorId.HasValue && posing.IsBoneSelected(mirrorId.Value))
+                                        {
+                                            if(string.Compare(selectedBoneId.BoneName, mirrorId.Value.BoneName, StringComparison.Ordinal) > 0)
+                                                continue;
+                                        }
+                                    }
+
+                                    var boneTransform = targetBone.LastTransform;
+                                    var updatedTransform = boneTransform + delta;
+                                    posing.SkeletonPosing.GetBonePose(selectedBoneId).Apply(updatedTransform, boneTransform, applyTo: applyTo, mirrorMode: mirrorAlt ? PoseMirrorMode.Mirror : null);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            posing.SkeletonPosing.GetBonePose(bone).Apply(newTransform.Value, beforeMods);
+                        }
+                    },
+                    _ =>
+                    {
+                        if(_groupedPendingSnapshot == null && ImGuizmo.IsUsing())
+                        {
+                            var list = new List<(EntityId, PoseInfo, Transform)>();
+                            foreach(var id in _entityManager.SelectedEntityIds)
+                            {
+                                if(!_entityManager.TryGetEntity(id, out var ent))
+                                    continue;
+
+                                if(!ent.TryGetCapability<PosingCapability>(out var cap))
+                                    continue;
+
+                                list.Add((id, cap.SkeletonPosing.PoseInfo.Clone(), cap.ModelPosing.Transform));
+                            }
+                            _groupedPendingSnapshot = list;
+                        }
+
+                        foreach(var id in _entityManager.SelectedEntityIds)
+                        {
+                            if(!_entityManager.TryGetEntity(id, out var ent))
+                                continue;
+
+                            if(!ent.TryGetCapability<PosingCapability>(out var cap))
+                                continue;
+
+                            if(cap.ModelPosing.Freeze)
+                                continue;
+
+                            cap.ModelPosing.Transform += delta;
+                        }
+                    },
+                    _ => { }
+                );
+            }
+        }
+    }
+
+    private void OnGPoseStateChanged(bool newState)
+    {
+        if(newState)
+            IsOpen = _configurationService.Configuration.Posing.OverlayDefaultsOn;
+        else
+            IsOpen = false;
+    }
+
+    public void Dispose()
+    {
+        _gPoseService.OnGPoseStateChange -= OnGPoseStateChanged;
+
+        GC.SuppressFinalize(this);
+    }
+
+
+    void DrawLineWorld(Vector3 a, Vector3 b, uint color, float thickness)
+    {
+        var result = GetAdjustedLine(a, b);
+        if(result.posA == null) return;
+        ImGui.GetWindowDrawList().PathLineTo(new Vector2(result.posA.Value.X, result.posA.Value.Y));
+        ImGui.GetWindowDrawList().PathLineTo(new Vector2(result.posB.Value.X, result.posB.Value.Y));
+        ImGui.GetWindowDrawList().PathStroke(color, ImDrawFlags.None, thickness);
+    }
+
+    (Vector2? posA, Vector2? posB) GetAdjustedLine(Vector3 pointA, Vector3 pointB)
+    {
+        var resultA = _gameGui.WorldToScreen(pointA, out Vector2 posA);
+        var resultB = _gameGui.WorldToScreen(pointB, out Vector2 posB);
+        //if (!resultA || !resultB) return default;
+        return (posA, posB);
+    }
+
+    public void DrawRingWorld(Vector3 position, float radius, uint color, float thickness)
+    {
+        var segments = 50;
+        int seg = segments / 2;
+        Vector2?[] elements = new Vector2?[segments];
+        for(int i = 0; i < segments; i++)
+        {
+            _gameGui.WorldToScreen(
+                new Vector3(position.X + radius * (float)Math.Sin(Math.PI / seg * i),
+                position.Y,
+                position.Z + radius * (float)Math.Cos(Math.PI / seg * i)
+                ),
+                out Vector2 pos);
+            elements[i] = new Vector2(pos.X, pos.Y);
+        }
+        foreach(var pos in elements)
+        {
+            if(pos == null) continue;
+            ImGui.GetWindowDrawList().PathLineTo(pos.Value);
+        }
+        ImGui.GetWindowDrawList().PathStroke(color, ImDrawFlags.Closed, thickness);
+    }
+
+    public static Vector4 Get(Vector4 start, Vector4 end, int Milliseconds = 1000)
+    {
+        var delta = (end - start) / (int)Milliseconds;
+        var time = Environment.TickCount64 % (Milliseconds * 2);
+        if(time < Milliseconds)
+        {
+            return start + delta * (float)(time % Milliseconds);
+        }
+        else
+        {
+            return end - delta * ((float)(time % Milliseconds));
+        }
+    }
+
+    private class OverlayUIState(PosingConfiguration configuration)
+    {
+        public bool PopupOpen = ImGui.IsPopupOpen(_boneSelectPopupName);
+        public bool UsingGizmo = ImGuizmo.IsUsing();
+        public bool HoveringGizmo = ImGuizmo.IsOver();
+        public bool AnyActive = ImGui.IsAnyItemActive();
+        public bool AnyWindowHovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow);
+        public bool UserDisablingSkeleton = InputManagerService.ActionKeysPressed(InputAction.Posing_DisableSkeleton);
+        public bool UserDisablingGizmo = InputManagerService.ActionKeysPressed(InputAction.Posing_DisableGizmo);
+        public bool UserHidingOverlay = InputManagerService.ActionKeysPressed(InputAction.Posing_HideOverlay);
+
+
+        public bool AnythingBusy => PopupOpen || UsingGizmo || AnyActive || AnyWindowHovered;
+
+        public bool AnyClickableHovered = false;
+        public bool AnyClickableClicked = false;
+
+        public bool DrawSkeletonLines => !UserHidingOverlay && configuration.ShowSkeletonLines && (!UsingGizmo || !configuration.HideSkeletonWhenGizmoActive);
+        public bool DrawSkeletonDots => !UserHidingOverlay && (!UsingGizmo || !configuration.HideSkeletonWhenGizmoActive);
+        public bool SkeletonLinesEnabled => !PopupOpen && !UsingGizmo && !UserDisablingSkeleton;
+        public bool SkeletonDotsEnabled => !PopupOpen && !UsingGizmo && !UserDisablingSkeleton;
+        public bool SkeletonInputEnabled => !AnythingBusy && DrawSkeletonDots && SkeletonDotsEnabled;
+
+        public bool DrawGizmo => !UserHidingOverlay && !(configuration.HideGizmoWhenAdvancedPosingOpen && UIManager.IsPosingGraphicalWindowOpen);
+        public bool GizmoEnabled => !PopupOpen && !AnyClickableClicked && !AnyClickableHovered && !UserDisablingGizmo;
+    }
+
+    public class ClickableItem
+    {
+        public string Name = string.Empty; // It's just easier this way
+
+        public PosingSelectionType Item = null!;
+
+        public Vector2 ScreenPosition;
+        public Vector2? ParentScreenPosition = null;
+
+        public float Size;
+        public bool CurrentlySelected;
+        public bool CurrentlyHovered;
+        public bool WasClicked;
+    }
+}
+
+public static class EColor
+{
+    public static Vector4 RedBright = Vector4FromRGB(0xFF0000);
+    public static Vector4 Red = Vector4FromRGB(0xAA0000);
+    public static Vector4 RedDark = Vector4FromRGB(0x440000);
+    public static Vector4 GreenBright = Vector4FromRGB(0x00ff00);
+    public static Vector4 Green = Vector4FromRGB(0x00aa00);
+    public static Vector4 GreenDark = Vector4FromRGB(0x004400);
+    public static Vector4 BlueBright = Vector4FromRGB(0x0000ff);
+    public static Vector4 Blue = Vector4FromRGB(0x0000aa);
+    public static Vector4 White = Vector4FromRGB(0xFFFFFF);
+    public static Vector4 Black = Vector4FromRGB(0x000000);
+    public static Vector4 YellowBright = Vector4FromRGB(0xFFFF00);
+    public static Vector4 Yellow = Vector4FromRGB(0xAAAA00);
+    public static Vector4 YellowDark = Vector4FromRGB(0x444400);
+    public static Vector4 OrangeBright = Vector4FromRGB(0xFF7F00);
+    public static Vector4 Orange = Vector4FromRGB(0xAA5400);
+    public static Vector4 CyanBright = Vector4FromRGB(0x00FFFF);
+    public static Vector4 Cya = Vector4FromRGB(0x00aaaa);
+    public static Vector4 VioletBright = Vector4FromRGB(0xFF00FF);
+    public static Vector4 Violet = Vector4FromRGB(0xAA00AA);
+    public static Vector4 VioletDark = Vector4FromRGB(0x440044);
+    public static Vector4 BlueSky = Vector4FromRGB(0x0085FF);
+    public static Vector4 BlueSea = Vector4FromRGB(0x0058AA);
+    public static Vector4 PurpleBright = Vector4FromRGB(0xFF0084);
+    public static Vector4 Purple = Vector4FromRGB(0xAA0058);
+    public static Vector4 PinkLight = Vector4FromRGB(0xFFABD6);
+
+    /// <summary>
+    /// Converts RGB color to <see cref="Vector4"/> for ImGui
+    /// </summary>
+    /// <param name="col">Color in format 0xRRGGBB</param>
+    /// <param name="alpha">Optional transparency value between 0 and 1</param>
+    /// <returns>Color in <see cref="Vector4"/> format ready to be used with <see cref="ImGui"/> functions</returns>
+    public static unsafe Vector4 Vector4FromRGB(this uint col, float alpha = 1.0f)
+    {
+        var bytes = (byte*)&col;
+        return new Vector4((float)bytes[2] / 255f, (float)bytes[1] / 255f, (float)bytes[0] / 255f, alpha);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint ToUint(this Vector4 color) => ImGui.ColorConvertFloat4ToU32(color);
+
+}

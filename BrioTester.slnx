@@ -1,0 +1,11 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="BrioTester/BrioTester.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="Libs/Brio API/Brio.API/Brio.API.csproj">
+    <Platform Project="x64" />
+  </Project>
+</Solution>

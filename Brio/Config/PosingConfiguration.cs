@@ -1,0 +1,54 @@
+﻿namespace Brio.Config;
+
+using System.Collections.Generic;
+
+public class PosingConfiguration
+{
+    // Overlay
+    public bool OverlayDefaultsOn { get; set; } = false;
+    public bool AllowGizmoAxisFlip { get; set; } = true;
+    public float BoneCircleSize { get; set; } = 6.300f;
+
+    public uint LightCircleNormalColor { get; set; } = 0xFF00D9FC;
+    public uint LightCircleHoveredColor { get; set; } = 0xFF2CE2FF;
+    public uint LightCircleSelectedColor { get; set; } = 0xFF00D9FC;
+
+    public uint BoneCircleNormalColor { get; set; } = 0xFFFFFFFF;
+    public uint BoneCircleInactiveColor { get; set; } = 0x55555555;
+    public uint BoneCircleHoveredColor { get; set; } = 0xFFFF0073;
+    public uint BoneCircleSelectedColor { get; set; } = 0xFFF82B56;
+    public float SkeletonLineThickness { get; set; } = 0.010f;
+    public uint SkeletonLineActiveColor { get; set; } = 0xFFFFFFFF;
+    public uint SkeletonLineInactiveColor { get; set; } = 0x55555555;
+    public bool ShowSkeletonLines { get; set; } = true;
+    public bool SkeletonLineToCircle { get; set; } = true;
+    public bool HideGizmoWhenAdvancedPosingOpen { get; set; } = false;
+    public bool HideToolbarWhenAdvandedPosingOpen { get; set; } = false;
+    public bool HideSkeletonWhenGizmoActive { get; set; } = false;
+    public bool DisableScrollWheelGizmoAndValueChanges { get; set; } = false;
+    public bool EnableMirrorMultiBoneHotkey { get; set; } = false;
+
+    public bool ModelTransformStandout { get; set; } = true;
+    public uint ModelTransformCircleStandOutColor { get; set; } = 0xFFE02B70;
+
+    // Bone category colors
+    public Dictionary<string, uint> BoneCategoryColors { get; set; } = new();
+    public bool UseBoneCategoryColors { get; set; } = false;
+
+    // Graphical Posing
+    public bool GraphicalSidesSwapped { get; set; } = false;
+    public bool ShowGenitaliaInAdvancedPoseWindow { get; set; } = false;
+
+    // Hooks
+    public bool DisableGPoseMouseSelect { get; set; } = true;
+    public bool HideNameOnGPoseSettingsWindow { get; set; } = true;
+
+    // Targeting
+    public bool GPoseTargetChangesWithBrio { get; set; } = false;
+    public bool BrioTargetChangesWithGPose { get; set; } = true;
+
+    // Undo / Redo
+    public int UndoStackSize { get; set; } = 50;
+
+    public bool FreezeActorOnPoseImport { get; set; } = false;
+}
