@@ -1,24 +1,23 @@
 Fork of Brio 0.7.1.1
 
-# Changelog (Custom)
-- Added a Cameras header lock toggle that fully disables camera movement (mouse drag included), with distinct locked/unlocked icons.
-- Added an Actors header button to select all actors' Model Transform and clear other bone selections.
-- Added a Bone Filter toggle to show bones from all visible actors, with selectable bones activating the clicked actor.
-- Added a mirror multi-bone gizmo modifier (default tilde, configurable in Solaris).
-- Added a Solaris settings tab (first tab) and moved the scroll-wheel disable setting there.
-- Improved camera hook startup resilience to avoid crashes when hook allocation fails (camera overrides disabled when hooks fail).
-- Changed default bone visibility to display only: Head, Body, Right Arm, Left Arm, Left Leg, Right Leg, and Tail for a cleaner interface.
-- Added a reset button to the Bone Filter that resets selected bones to the default set.
-- Moved IVCS Bones and Other Bones to collapsible dropdown headers in the Bone Filter for a cleaner menu.
-- Moved Emote Props, Fashion Accessories, Dawntrail Other, and Other under the Other Bones header.
-- Added bone category color customization in the Solaris settings tab with improved category names: "Left Arm", "Right Arm", "Left Leg", "Right Leg".
-- Skeleton lines connecting bones now match the color of the bone circles they connect to.
-- Color-coded XYZ input fields in transform controls (Position, Rotation, Scale) to match gizmo colors: Red for X-axis, Green for Y-axis, Blue for Z-axis.
-- Added customizable text colors for dropdown tabs in the main window (small color picker on the right of each header).
-- Added customizable text colors for Actors, Cameras, and Environment container headers in the entity hierarchy.
-- Added "Show UI Color Pickers" toggle in Solaris tab to hide/show all color picker buttons throughout the UI.
-- Added "Reset Colors" button next to "Show UI Color Pickers" to reset all custom colors to defaults.
-- Added "Reset Colors" button next to "Use Bone Category Colors" to reset bone category colors to defaults.
+# Changelog (Custom - Solaris Fork)
+
+## UI/UX Improvements
+- Enhanced camera controls with lock toggle and distinct locked/unlocked icons
+- Improved bone filter with multi-actor visibility and reset functionality
+- Reorganized bone hierarchy with collapsible categories for cleaner navigation
+
+## Posing Enhancements
+- Added select-all actors' Model Transform button for batch operations
+- Added mirror multi-bone gizmo modifier (default tilde, configurable)
+- Cleaner default bone visibility showing only main body parts
+
+## Customization & Theming
+- Bone category color customization in Solaris settings tab
+- Customizable text colors for UI dropdowns, actors, cameras, and environment headers
+- Color-coded XYZ input fields matching gizmo axis colors (Red/Green/Blue)
+- Show/Hide toggle for all color pickers throughout the UI
+- Reset buttons for UI colors and bone category colors
 
 # Brio
 
