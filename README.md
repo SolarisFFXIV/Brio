@@ -1,5 +1,7 @@
 # Changes/Added Features (Fork of Brio 0.7.1.1)
 
+![Brio - Solaris Fork](Screenshots/showcase.png)
+
 ## UI/UX Improvements
 - Enhanced camera controls with lock toggle and distinct locked/unlocked icons
 - Improved bone filter with multi-actor visibility and reset functionality
