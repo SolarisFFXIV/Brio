@@ -37,7 +37,7 @@ jobs:
       run: dotnet restore Brio.slnx
       
     - name: Build Brio
-      run: dotnet build --no-restore Brio.slnx /p:Configuration=Release /p:DebugType=None /p:DebugSymbols=false /p:Version=0.0.0.1
+      run: dotnet build --no-restore Brio.slnx /p:Configuration=Release /p:DebugType=None /p:DebugSymbols=false /p:Version=1.0.0
 
     - name: Zip Release
       uses: TheDoctor0/zip-release@0.6.0
