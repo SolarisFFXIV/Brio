@@ -1,5 +1,26 @@
 Fork of Brio 0.7.1.1
 
+## ⚠️ IMPORTANT: Installation & Compatibility Warning
+
+**You MUST remove the original Brio plugin before installing this fork!**
+
+This is a fork with custom modifications. Having both the original Brio and this fork installed simultaneously will cause conflicts and errors. 
+
+### Installation Steps:
+1. **Remove original Brio** from your Dalamud plugins
+2. **Add this repository** to Dalamud:
+   - Type `/xlsettings` in the chat window
+   - Go to the **Experimental** tab
+   - Under "Custom Plugin Repositories", click the **+** button
+   - Paste this URL: `https://raw.githubusercontent.com/SolarisFFXIV/Brio/refs/heads/solaris/repo.json`
+   - Click **Save** at the bottom right
+3. **Install the plugin**:
+   - Open the **Dalamud Plugin Installer** (System Menu → Dalamud Plugins)
+   - Search for "Brio - Solaris Fork"
+   - Click **Install**
+   - Make sure it's **Enabled**
+4. You're done! The plugin will open when you enter G-Pose (or type `/brio` to open it manually)
+
 # Changelog (Custom - Solaris Fork)
 
 ## UI/UX Improvements
