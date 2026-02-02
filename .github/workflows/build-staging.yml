@@ -6,11 +6,11 @@ permissions:
 on:
   push:
     branches: 
-    - main
+    - solaris
     tags-ignore: '*'
   pull_request:
     branches:
-    - main
+    - solaris
 
 jobs:
   build:
