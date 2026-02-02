@@ -19,12 +19,12 @@
 
 ## ⚠️ IMPORTANT: Installation & Compatibility Warning
 
-**You MUST remove the original Brio plugin before installing this fork!**
+**You MUST disable the original Brio plugin before installing this fork!**
 
-This is a fork with custom modifications. Having both the original Brio and this fork installed simultaneously will cause conflicts and errors. 
+This is a fork with custom modifications. Having both the original Brio and this fork enabled simultaneously will cause conflicts and errors. 
 
 ### Installation Steps:
-1. **Remove original Brio** from your Dalamud plugins
+1. **Disable original Brio** in your Dalamud plugins
 2. **Add this repository** to Dalamud:
    - Type `/xlsettings` in the chat window
    - Go to the **Experimental** tab
