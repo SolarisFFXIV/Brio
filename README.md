@@ -1,4 +1,21 @@
-Fork of Brio 0.7.1.1
+# Changes/Added Features (Fork of Brio 0.7.1.1)
+
+## UI/UX Improvements
+- Enhanced camera controls with lock toggle and distinct locked/unlocked icons
+- Improved bone filter with multi-actor visibility and reset functionality
+- Reorganized bone hierarchy with collapsible categories for cleaner navigation
+
+## Posing Enhancements
+- Added select-all actors' Model Transform button for batch operations
+- Added mirror multi-bone gizmo modifier (default tilde, configurable)
+- Cleaner default bone visibility showing only main body parts
+
+## Customization & Theming
+- Bone category color customization in Solaris settings tab
+- Customizable text colors for UI dropdowns, actors, cameras, and environment headers
+- Color-coded XYZ input fields matching gizmo axis colors (Red/Green/Blue)
+- Show/Hide toggle for all color pickers throughout the UI
+- Reset buttons for UI colors and bone category colors
 
 ## ⚠️ IMPORTANT: Installation & Compatibility Warning
 
@@ -20,25 +37,6 @@ This is a fork with custom modifications. Having both the original Brio and this
    - Click **Install**
    - Make sure it's **Enabled**
 4. You're done! The plugin will open when you enter G-Pose (or type `/brio` to open it manually)
-
-# Changelog (Custom - Solaris Fork)
-
-## UI/UX Improvements
-- Enhanced camera controls with lock toggle and distinct locked/unlocked icons
-- Improved bone filter with multi-actor visibility and reset functionality
-- Reorganized bone hierarchy with collapsible categories for cleaner navigation
-
-## Posing Enhancements
-- Added select-all actors' Model Transform button for batch operations
-- Added mirror multi-bone gizmo modifier (default tilde, configurable)
-- Cleaner default bone visibility showing only main body parts
-
-## Customization & Theming
-- Bone category color customization in Solaris settings tab
-- Customizable text colors for UI dropdowns, actors, cameras, and environment headers
-- Color-coded XYZ input fields matching gizmo axis colors (Red/Green/Blue)
-- Show/Hide toggle for all color pickers throughout the UI
-- Reset buttons for UI colors and bone category colors
 
 ## Disclaimer
 This project was vibe coded. I'm not a programmer and don't claim to be one. I simply wanted to add a few GPose features quickly to make things easier for myself.
