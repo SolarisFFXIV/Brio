@@ -44,6 +44,7 @@ public unsafe class LightingService : IDisposable
     private readonly GPoseService _gPoseService;
     private readonly EntityManager _entityManager;
     private readonly VirtualCameraManager _virtualCameraManager;
+    private readonly CameraService _cameraService;
 
     // Spawn Lights
     private readonly unsafe delegate* unmanaged<GameLight*, void> _spawnGameLight;
@@ -77,12 +78,13 @@ public unsafe class LightingService : IDisposable
 
     //
 
-    public unsafe LightingService(IServiceProvider serviceProvider, EntityManager entityManager, GPoseService gPoseService, VirtualCameraManager virtualCameraManager, IFramework framework, ISigScanner sigScanner, IGameInteropProvider hooks)
+    public unsafe LightingService(IServiceProvider serviceProvider, EntityManager entityManager, GPoseService gPoseService, VirtualCameraManager virtualCameraManager, CameraService cameraService, IFramework framework, ISigScanner sigScanner, IGameInteropProvider hooks)
     {
         _serviceProvider = serviceProvider;
         _gPoseService = gPoseService;
         _entityManager = entityManager;
         _virtualCameraManager = virtualCameraManager;
+        _cameraService = cameraService;
         _framework = framework;
 
         var spawnGameLightAddress = sigScanner.ScanText("E8 ?? ?? ?? ?? 48 89 84 ?? ?? ?? ?? ?? 48 85 C0 0F ?? ?? ?? ?? ?? 48 8B C8");
@@ -227,15 +229,38 @@ public unsafe class LightingService : IDisposable
 
         if(_virtualCameraManager.CurrentCamera is not null)
         {
-            if(_virtualCameraManager.CurrentCamera.IsFreeCamera)
+            var camera = _cameraService.GetCurrentCamera();
+            if(camera != null)
             {
-                light->Transform.Position = _virtualCameraManager.CurrentCamera.Position;
-                light->Transform.Rotation = _virtualCameraManager.CurrentCamera.Rotation.ToEulerAngles();
-            }
-            else
-            {
-                light->Transform.Position = _virtualCameraManager.CurrentCamera.BrioCamera->Position;
-                light->Transform.Rotation = _virtualCameraManager.CurrentCamera.BrioCamera->CalculateDirectionAsQuaternion();
+                if(_virtualCameraManager.CurrentCamera.IsFreeCamera)
+                {
+                    // For Free-Cam, use Position and Rotation from VirtualCamera
+                    light->Transform.Position = _virtualCameraManager.CurrentCamera.Position;
+                    var rotation = _virtualCameraManager.CurrentCamera.Rotation;
+                    // Add 180 degrees to yaw so light points forward where camera is looking
+                    light->Transform.Rotation = Quaternion.CreateFromYawPitchRoll(rotation.X + MathF.PI, rotation.Y, rotation.Z);
+                }
+                else
+                {
+                    // For regular cameras, get actual 3D position and use LookAtVector for direction
+                    light->Transform.Position = camera->GetPosition();
+                    var cameraPos = camera->GetPosition();
+                    var cameraTarget = (Vector3)camera->Camera.CameraBase.SceneCamera.LookAtVector;
+                    var forwardVector = Vector3.Normalize(cameraTarget - cameraPos);
+                    
+                    // Create rotation from forward direction
+                    var upVector = new Vector3(0, 1, 0);
+                    var rightVector = Vector3.Normalize(Vector3.Cross(upVector, forwardVector));
+                    var adjustedUpVector = Vector3.Cross(forwardVector, rightVector);
+                    
+                    var rotationMatrix = new Matrix4x4(
+                        rightVector.X, rightVector.Y, rightVector.Z, 0,
+                        adjustedUpVector.X, adjustedUpVector.Y, adjustedUpVector.Z, 0,
+                        forwardVector.X, forwardVector.Y, forwardVector.Z, 0,
+                        0, 0, 0, 1
+                    );
+                    light->Transform.Rotation = Quaternion.CreateFromRotationMatrix(rotationMatrix);
+                }
             }
         }
 

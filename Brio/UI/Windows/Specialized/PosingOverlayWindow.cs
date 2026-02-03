@@ -237,6 +237,16 @@ public class PosingOverlayWindow : Window, IDisposable
             else
             {
                 _entityManager.SetSelectedEntity(clicked[0].entity.Id);
+
+                // Auto-select Model Transform bone if the setting is enabled
+                if(_configurationService.Configuration.Posing.AutoSelectModelTransformOnActorSelection)
+                {
+                    if(clicked[0].entity is ActorEntity actorEntity && actorEntity.TryGetCapability<PosingCapability>(out var posingCapability))
+                    {
+                        posingCapability.ClearSelection();
+                        posingCapability.Selected = PosingSelectionType.ModelTransform;
+                    }
+                }
             }
         }
 
@@ -306,6 +316,12 @@ public class PosingOverlayWindow : Window, IDisposable
                 if(ImGui.IsMouseClicked(ImGuiMouseButton.Left))
                 {
                     _lightingService.SelectedLightEntity = lightCapability.Entity as LightEntity;
+
+                    // Auto-select the light entity in the EntityManager if the setting is enabled
+                    if(_configurationService.Configuration.Posing.AutoSelectModelTransformOnActorSelection)
+                    {
+                        _entityManager.SetSelectedEntity(lightCapability.Entity.Id);
+                    }
 
                     clicked.Add(clickable);
                     clickable.WasClicked = true;

@@ -70,9 +70,9 @@ public class PosingWidget(PosingCapability capability) : Widget<PosingCapability
             {
                 ImGui.OpenPopup("widget_bone_search_popup");
             }
-        }
 
-        ImGui.SameLine();
+            ImGui.SameLine();
+        }
 
         if(ImBrio.FontIconButton("undo", FontAwesomeIcon.Backward, "Undo", Capability.CanUndo) || (InputManagerService.ActionKeysPressedLastFrame(InputAction.Posing_Undo) && Capability.CanUndo))
         {

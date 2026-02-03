@@ -4,6 +4,7 @@ using Brio.Entities.Core;
 using Brio.Game.Core;
 using Brio.Game.GPose;
 using Brio.Game.Scene;
+using Brio.Game.World;
 using Brio.MCDF.Game.Services;
 using Brio.Services;
 using Brio.UI.Controls.Core;
@@ -48,7 +49,8 @@ public class MainWindow : Window, IDisposable
         GPoseService gPoseService,
         ProjectWindow projectWindow,
         AutoSaveService autoSaveService,
-        MCDFService mCDFService
+        MCDFService mCDFService,
+        LightingService lightingService
         )
         : base($" {Brio.Name} - Solaris Fork [{configService.Version}]###brio_main_window", ImGuiWindowFlags.AlwaysAutoResize)
     {
@@ -61,7 +63,7 @@ public class MainWindow : Window, IDisposable
         _entityManager = entityManager;
         _gPoseService = gPoseService;
         _groupedUndoService = groupedUndoService;
-        _entitySelector = new(_entityManager, _gPoseService, _groupedUndoService);
+        _entitySelector = new(_entityManager, _gPoseService, _groupedUndoService, _configurationService, lightingService);
         _sceneService = sceneService;
         _projectWindow = projectWindow;
         _autoSaveService = autoSaveService;

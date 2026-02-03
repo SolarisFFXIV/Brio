@@ -2,7 +2,9 @@
 using Brio.Capabilities.Posing;
 using Brio.Capabilities.World;
 using Brio.Config;
+using Brio.Core;
 using Brio.Entities;
+using Brio.Game.Camera;
 using Brio.Game.Input;
 using Brio.Game.Posing;
 using Brio.Game.World;
@@ -35,6 +37,8 @@ public class PosingOverlayToolbarWindow : Window
     private readonly ConfigurationService _configurationService;
     private readonly GameInputService _gameInputService;
     private readonly LightingService _lightingService;
+    private readonly CameraService _cameraService;
+    private readonly VirtualCameraManager _virtualCameraManager;
 
     private readonly IFramework _framework;
 
@@ -44,7 +48,7 @@ public class PosingOverlayToolbarWindow : Window
 
     private const string _boneFilterPopupName = "bone_filter_popup";
 
-    public PosingOverlayToolbarWindow(PosingOverlayWindow overlayWindow, IFramework framework, LightWindow lightWindow, LightingService lightingService, HistoryService groupedUndoService, GameInputService gameInputService, EntityManager entityManager, PosingTransformWindow overlayTransformWindow, PosingService posingService, ConfigurationService configurationService) : base($"{Brio.Name} OVERLAY###brio_posing_overlay_toolbar_window", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse)
+    public PosingOverlayToolbarWindow(PosingOverlayWindow overlayWindow, IFramework framework, LightWindow lightWindow, LightingService lightingService, HistoryService groupedUndoService, GameInputService gameInputService, EntityManager entityManager, PosingTransformWindow overlayTransformWindow, PosingService posingService, ConfigurationService configurationService, CameraService cameraService, VirtualCameraManager virtualCameraManager) : base($"{Brio.Name} OVERLAY###brio_posing_overlay_toolbar_window", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse)
     {
         Namespace = "brio_posing_overlay_toolbar_namespace";
 
@@ -57,6 +61,8 @@ public class PosingOverlayToolbarWindow : Window
         _gameInputService = gameInputService;
         _lightWindow = lightWindow;
         _lightingService = lightingService;
+        _cameraService = cameraService;
+        _virtualCameraManager = virtualCameraManager;
         _framework = framework;
 
         ShowCloseButton = false;
@@ -206,7 +212,7 @@ public class PosingOverlayToolbarWindow : Window
 
 
     // This is awful I hate it. but I need this done fast (FAST)
-    public void DrawLightButtons(LightTransformCapability? lightTransformCapability)
+    public unsafe void DrawLightButtons(LightTransformCapability? lightTransformCapability)
     {
         ImGui.PushStyleColor(ImGuiCol.Button, UIConstants.Transparent);
 
@@ -369,10 +375,79 @@ public class PosingOverlayToolbarWindow : Window
             ImBrio.AttachToolTip("Save Light to Clipboard");
         }
 
+        //
+        // -------------
+        //
+
+        ImBrio.VerticalPadding(5);
+        ImGui.Separator();
+        ImBrio.VerticalPadding(5);
+
+        // Move to Camera Button
+        var hasCameraForLight = _virtualCameraManager.CurrentCamera is not null;
+        using(ImRaii.Disabled(!hasCameraForLight))
+        using(ImRaii.PushFont(UiBuilder.IconFont))
+        {
+            if(ImGui.Button($"{FontAwesomeIcon.Video.ToIconString()}###move_to_camera", new Vector2(ImGui.GetContentRegionAvail().X, button3XSize / 1.2f)))
+            {
+                if(lightTransformCapability is not null && _virtualCameraManager.CurrentCamera is not null)
+                {
+                    var camera = _cameraService.GetCurrentCamera();
+                    if(camera != null)
+                    {
+                        Vector3 cameraPos;
+                        Quaternion cameraRotation;
+                        
+                        // Check if using Free-Cam or regular camera
+                        if(_virtualCameraManager.CurrentCamera.IsFreeCamera)
+                        {
+                            // For Free-Cam, use both Position and Rotation from VirtualCamera
+                            cameraPos = _virtualCameraManager.CurrentCamera.Position;
+                            var rotation = _virtualCameraManager.CurrentCamera.Rotation;
+                            
+                            // Create quaternion from the Free-Cam's rotation angles and add 180 degree yaw to flip direction
+                            cameraRotation = Quaternion.CreateFromYawPitchRoll(rotation.X + MathF.PI, rotation.Y, rotation.Z);
+                        }
+                        else
+                        {
+                            // For regular cameras, get position from actual camera pointer and use LookAtVector
+                            cameraPos = camera->GetPosition();
+                            var cameraTarget = (Vector3)camera->Camera.CameraBase.SceneCamera.LookAtVector;
+                            var forwardVector = Vector3.Normalize(cameraTarget - cameraPos);
+                            
+                            // Create a rotation quaternion from the forward direction
+                            var upVector = new Vector3(0, 1, 0);
+                            var rightVector = Vector3.Normalize(Vector3.Cross(upVector, forwardVector));
+                            var adjustedUpVector = Vector3.Cross(forwardVector, rightVector);
+                            
+                            // Create rotation matrix and convert to quaternion
+                            var rotationMatrix = new Matrix4x4(
+                                rightVector.X, rightVector.Y, rightVector.Z, 0,
+                                adjustedUpVector.X, adjustedUpVector.Y, adjustedUpVector.Z, 0,
+                                forwardVector.X, forwardVector.Y, forwardVector.Z, 0,
+                                0, 0, 0, 1
+                            );
+                            cameraRotation = Quaternion.CreateFromRotationMatrix(rotationMatrix);
+                        }
+                        
+                        lightTransformCapability.Snapshot();
+                        lightTransformCapability.position = cameraPos;
+                        lightTransformCapability.rotation = cameraRotation.ToEuler();
+                        lightTransformCapability.Transform.Position = cameraPos;
+                        lightTransformCapability.Transform.Rotation = cameraRotation;
+                        lightTransformCapability.Light.GameLight.GameLight->Transform.Position = cameraPos;
+                        lightTransformCapability.Light.GameLight.GameLight->Transform.Rotation = cameraRotation;
+                        lightTransformCapability.Light.GameLight.GameLight->Transform.Rotation = cameraRotation;
+                    }
+                }
+            }
+        }
+        ImBrio.AttachToolTip(hasCameraForLight ? "Move Light to Camera Position and Rotation" : "No Camera Available");
+
         ImGui.PopStyleColor();
     }
 
-    private void DrawButtons(PosingCapability? posing, ActionTimelineCapability? timelineCapability, bool hasMultipleActorsSelected)
+    private unsafe void DrawButtons(PosingCapability? posing, ActionTimelineCapability? timelineCapability, bool hasMultipleActorsSelected)
     {
         ImGui.PushStyleColor(ImGuiCol.Button, UIConstants.Transparent);
 
@@ -818,6 +893,36 @@ public class PosingOverlayToolbarWindow : Window
                 FileUIHelpers.ShowExportPoseModal(posing);
         }
         ImBrio.AttachToolTip("Save Pose");
+
+        //
+        // -------------
+        //
+
+        ImBrio.VerticalPadding(5);
+        ImGui.Separator();
+        ImBrio.VerticalPadding(5);
+
+        // Move to Camera Button
+        var hasCameraForActor = _virtualCameraManager.CurrentCamera is not null;
+        using(ImRaii.Disabled(hasMultipleActorsSelected || !hasCameraForActor))
+        using(ImRaii.PushFont(UiBuilder.IconFont))
+        {
+            if(ImGui.Button($"{FontAwesomeIcon.Video.ToIconString()}###move_actor_to_camera", new Vector2(ImGui.GetContentRegionAvail().X, button3XSize / 1.2f)))
+            {
+                if(posing is not null)
+                {
+                    var camera = _cameraService.GetCurrentCamera();
+                    if(camera != null)
+                    {
+                        // Get actual camera position in 3D space (accounts for zoom/distance)
+                        var cameraPos = camera->GetPosition();
+                        posing.Snapshot();
+                        posing.ModelPosing.Transform = posing.ModelPosing.Transform with { Position = cameraPos };
+                    }
+                }
+            }
+        }
+        ImBrio.AttachToolTip(hasCameraForActor ? "Move Actor to Camera Position" : "No Camera Available");
 
         ImGui.PopStyleColor();
 

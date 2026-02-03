@@ -122,12 +122,22 @@ public static class PosingExtensions
         _ => ImGuizmoMode.Local
     };
 
-    public static ImGuizmoOperation AsGizmoOperation(this PosingOperation operation) => operation switch
+    public static ImGuizmoOperation AsGizmoOperation(this PosingOperation operation)
     {
-        PosingOperation.Translate => ImGuizmoOperation.Translate,
-        PosingOperation.Rotate => ImGuizmoOperation.Rotate,
-        PosingOperation.Scale => ImGuizmoOperation.Scale,
-        PosingOperation.Universal => ImGuizmoOperation.Translate | ImGuizmoOperation.Rotate | ImGuizmoOperation.Scale,
-        _ => ImGuizmoOperation.Rotate
-    };
+        if(operation == PosingOperation.Universal)
+        {
+            var hideScale = Config.ConfigurationService.Instance?.Configuration?.Posing?.HideScaleInUniversalGizmo ?? false;
+            return hideScale 
+                ? ImGuizmoOperation.Translate | ImGuizmoOperation.Rotate 
+                : ImGuizmoOperation.Translate | ImGuizmoOperation.Rotate | ImGuizmoOperation.Scale;
+        }
+        
+        return operation switch
+        {
+            PosingOperation.Translate => ImGuizmoOperation.Translate,
+            PosingOperation.Rotate => ImGuizmoOperation.Rotate,
+            PosingOperation.Scale => ImGuizmoOperation.Scale,
+            _ => ImGuizmoOperation.Rotate
+        };
+    }
 }

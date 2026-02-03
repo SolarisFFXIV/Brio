@@ -16,6 +16,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using System.Text;
 
@@ -154,6 +155,24 @@ public class SettingsWindow : Window
                 DrawKeyBind(InputAction.Posing_MirrorMultiBone);
             }
 
+            bool autoSelectModelTransform = _configurationService.Configuration.Posing.AutoSelectModelTransformOnActorSelection;
+            if(ImGui.Checkbox("Auto-Select Model Transform and Light Origin", ref autoSelectModelTransform))
+            {
+                _configurationService.Configuration.Posing.AutoSelectModelTransformOnActorSelection = autoSelectModelTransform;
+                _configurationService.ApplyChange();
+            }
+            if(ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, clicking an Actor in the hierarchy or overlay will automatically select the Model Transform bone. Clicking a Light will select the light and its transform for editing.");
+
+            bool hideScaleInUniversal = _configurationService.Configuration.Posing.HideScaleInUniversalGizmo;
+            if(ImGui.Checkbox("Hide Scale in Universal Gizmo", ref hideScaleInUniversal))
+            {
+                _configurationService.Configuration.Posing.HideScaleInUniversalGizmo = hideScaleInUniversal;
+                _configurationService.ApplyChange();
+            }
+            if(ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, the Universal Gizmo will only show Position and Rotation controls, hiding Scale options.");
+
             bool showColorPickers = _configurationService.Configuration.Interface.ShowColorPickers;
             if(ImGui.Checkbox("Show UI Color Pickers", ref showColorPickers))
             {
@@ -170,6 +189,34 @@ public class SettingsWindow : Window
             }
             if(ImGui.IsItemHovered())
                 ImGui.SetTooltip("Reset all UI color pickers to default");
+
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+
+            ImGui.Text("Actor Categories Visibility");
+            if(ImGui.IsItemHovered())
+                ImGui.SetTooltip("Show or hide actor categories in the main Brio window");
+
+            using(var widgetChild = ImRaii.Child("###widget_visibility", new Vector2(-1, ImGui.GetTextLineHeightWithSpacing() * 6), true))
+            {
+                if(widgetChild.Success)
+                {
+                    var widgetVisibility = _configurationService.Configuration.Interface.WidgetVisibility;
+                    
+                    foreach(var kvp in widgetVisibility.OrderBy(x => x.Key))
+                    {
+                        var widgetName = kvp.Key;
+                        var isVisible = kvp.Value;
+                        
+                        if(ImGui.Checkbox($"Show {widgetName}", ref isVisible))
+                        {
+                            _configurationService.Configuration.Interface.WidgetVisibility[widgetName] = isVisible;
+                            _configurationService.ApplyChange();
+                        }
+                    }
+                }
+            }
 
             ImGui.Spacing();
             ImGui.Separator();

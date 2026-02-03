@@ -32,7 +32,12 @@ public class SceneService(EntityManager _entityManager, VirtualCameraManager _vi
         {
             if(child is ActorEntity actorEntity)
             {
-                sceneFile.Actors.Add(actorEntity);
+                // Only add actors that have the required capabilities for serialization
+                if(actorEntity.TryGetCapability<ActorAppearanceCapability>(out _) && 
+                   actorEntity.TryGetCapability<PosingCapability>(out _))
+                {
+                    sceneFile.Actors.Add(actorEntity);
+                }
             }
         }
 

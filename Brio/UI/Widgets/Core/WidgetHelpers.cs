@@ -28,6 +28,15 @@ public class WidgetHelpers
         if(widget == null || !widget.Flags.HasFlag(WidgetFlags.DrawBody))
             return;
 
+        // Check if this widget should be visible based on configuration
+        var visibilityConfig = ConfigurationService.Instance?.Configuration;
+        if(visibilityConfig?.Interface.WidgetVisibility != null)
+        {
+            string headerName = widget.HeaderName;
+            if(visibilityConfig.Interface.WidgetVisibility.ContainsKey(headerName) && !visibilityConfig.Interface.WidgetVisibility[headerName])
+                return;
+        }
+
         using(ImRaii.PushId(widget.GetType().Name))
         {
             ImGuiTreeNodeFlags treeFlags = ImGuiTreeNodeFlags.None;

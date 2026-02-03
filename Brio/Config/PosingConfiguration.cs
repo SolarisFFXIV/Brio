@@ -51,4 +51,8 @@ public class PosingConfiguration
     public int UndoStackSize { get; set; } = 50;
 
     public bool FreezeActorOnPoseImport { get; set; } = false;
+
+    // Auto-selection
+    public bool AutoSelectModelTransformOnActorSelection { get; set; } = false;
+    public bool HideScaleInUniversalGizmo { get; set; } = false;
 }

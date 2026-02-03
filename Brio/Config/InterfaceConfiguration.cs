@@ -30,4 +30,14 @@ public class InterfaceConfiguration
 
     // Show color pickers in UI
     public bool ShowColorPickers { get; set; } = true;
+
+    // Widget category visibility in main window
+    public Dictionary<string, bool> WidgetVisibility { get; set; } = new()
+    {
+        { "Appearance", true },
+        { "Dynamic Face Control", true },
+        { "Posing", true },
+        { "Animation Control", true },
+        { "Status Effects", true }
+    };
 }

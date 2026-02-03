@@ -2,6 +2,21 @@
 
 ![Brio - Solaris Fork](Screenshots/showcase.png)
 
+## Version 2 Changelog
+
+### New Features
+- **Auto-Select Model Transform and Light Origin**: Added setting in Solaris tab that automatically selects the Model Transform bone when clicking on an Actor in the hierarchy or overlay. For Lights, it selects the light and its transform for immediate editing. Disabled by default.
+- **Move to Camera Position Button**: Added button in the Brio Overlay menu that moves the currently selected Actor or Light to the camera's current position and rotation. For Lights, the rotation matches where the camera is looking (works with both regular cameras and Free-Cam).
+- **Hide Scale in Universal Gizmo**: Added setting in Solaris tab to hide scale controls from the Universal Gizmo, showing only position and rotation. Useful for users who primarily work with positioning and rotation. Disabled by default.
+- **Actor Categories Visibility Controls**: Added settings in Solaris tab to individually show/hide actor categories (Appearance, Dynamic Face Control, Posing, Animation Control, Status Effects). Useful for decluttering the interface and focusing on specific workflows. All categories visible by default.
+
+### Bug Fixes
+- Fixed autosave exception that occurred when actors were in invalid states during scene file generation
+- Fixed light spawning to point exactly where the camera is looking (works with both regular cameras and Free-Cam)
+- Fixed plugin folder conflict by renaming internal plugin name to BrioSolaris, allowing it to install in its own separate folder instead of sharing the Brio folder with the original plugin
+
+## Version 1 Changelog
+
 ## UI/UX Improvements
 - Enhanced camera controls with lock toggle and distinct locked/unlocked icons
 - Improved bone filter with multi-actor visibility and reset functionality

@@ -1,7 +1,12 @@
-﻿using Brio.Config;
+﻿using Brio.Capabilities.Posing;
+using Brio.Config;
 using Brio.Entities;
+using Brio.Entities.Actor;
 using Brio.Entities.Core;
+using Brio.Entities.World;
 using Brio.Game.GPose;
+using Brio.Game.Posing;
+using Brio.Game.World;
 using Brio.Input;
 using Brio.Services;
 using Brio.UI.Controls.Stateless;
@@ -17,7 +22,7 @@ using System.Numerics;
 
 namespace Brio.UI.Entitites;
 
-public class EntityHierarchyView(EntityManager entityManager, GPoseService gPoseService, HistoryService groupedUndoService)
+public class EntityHierarchyView(EntityManager entityManager, GPoseService gPoseService, HistoryService groupedUndoService, ConfigurationService configurationService, LightingService lightingService)
 {
     private float buttonWidth => ImGui.GetWindowContentRegionMax().X;
     private readonly float offsetWidth = 18f;
@@ -286,5 +291,23 @@ public class EntityHierarchyView(EntityManager entityManager, GPoseService gPose
     {
         _lastSelectedId = entity.Id;
         entityManager.SetSelectedEntity(entity);
+
+        // Auto-select Model Transform bone if the setting is enabled and we're selecting an actor
+        if(configurationService.Configuration.Posing.AutoSelectModelTransformOnActorSelection)
+        {
+            if(entity is ActorEntity actorEntity)
+            {
+                if(actorEntity.TryGetCapability<PosingCapability>(out var posingCapability))
+                {
+                    posingCapability.ClearSelection();
+                    posingCapability.Selected = PosingSelectionType.ModelTransform;
+                }
+            }
+            else if(entity is LightEntity lightEntity)
+            {
+                // Select the light in the lighting service
+                lightingService.SelectedLightEntity = lightEntity;
+            }
+        }
     }
 }
