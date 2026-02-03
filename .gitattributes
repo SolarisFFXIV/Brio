@@ -1,0 +1,2 @@
+# Ensure repo.json maintains proper line endings and encoding
+repo.json text eol=lf -diff
