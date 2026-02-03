@@ -13,7 +13,6 @@
 ### Bug Fixes
 - Fixed autosave exception that occurred when actors were in invalid states during scene file generation
 - Fixed light spawning to point exactly where the camera is looking (works with both regular cameras and Free-Cam)
-- Fixed plugin folder conflict by renaming internal plugin name to BrioSolaris, allowing it to install in its own separate folder instead of sharing the Brio folder with the original plugin
 
 ## Version 1 Changelog
 
