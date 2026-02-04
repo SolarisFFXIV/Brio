@@ -40,4 +40,7 @@ public class InterfaceConfiguration
         { "Animation Control", true },
         { "Status Effects", true }
     };
+
+    // Scroll bar size in main window
+    public float ScrollBarSize { get; set; } = 9.0f;
 }

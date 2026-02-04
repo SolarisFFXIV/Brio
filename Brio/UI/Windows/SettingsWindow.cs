@@ -191,6 +191,18 @@ public class SettingsWindow : Window
                 ImGui.SetTooltip("Reset all UI color pickers to default");
 
             ImGui.Spacing();
+            var scrollBarSize = _configurationService.Configuration.Interface.ScrollBarSize;
+            const string label5 = "Scroll Bar Size";
+            ImGui.SetNextItemWidth(-ImGui.CalcTextSize(label5).X - 15);
+            if(ImGui.SliderFloat(label5, ref scrollBarSize, 9.0f, 27.0f, "%.1f"))
+            {
+                _configurationService.Configuration.Interface.ScrollBarSize = scrollBarSize;
+                _configurationService.ApplyChange();
+            }
+            if(ImGui.IsItemHovered())
+                ImGui.SetTooltip("Adjust the size of scroll bars that appear in the main Brio window when it overflows with widgets.");
+
+            ImGui.Spacing();
             ImGui.Separator();
             ImGui.Spacing();
 
