@@ -6,6 +6,7 @@ using Brio.UI.Widgets.Core;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
+using System;
 using System.Numerics;
 
 namespace Brio.UI.Widgets.World;
@@ -111,6 +112,23 @@ public class SkyEditorWidget(SkyEditorCapability skyEditorCapability) : Widget<S
 
                 var didSkyChange = false;
 
+                // Ctrl + mouse wheel on the sky texture preview to cycle sky textures
+                var ioPreview = ImGui.GetIO();
+                var ctrlScrollEnabledPreview = true;
+                if(Brio.TryGetService(out global::Brio.Config.ConfigurationService? _cfgPreview))
+                    ctrlScrollEnabledPreview = _cfgPreview.Configuration.Posing.EnableCtrlScrollWheel;
+                if(ctrlScrollEnabledPreview && ImGui.IsItemHovered() && ioPreview.KeyCtrl && Math.Abs(ioPreview.MouseWheel) > 0.0f)
+                {
+                    var max = (int)_skyTextureSelector.MaxId;
+                    var current = (int)env->EnvState.SkyTextureID;
+                    var step = ioPreview.MouseWheel > 0 ? 1 : -1;
+                    var next = (current + step) % (max + 1);
+                    if(next < 0) next += (max + 1);
+                    env->EnvState.SkyTextureID = (uint)next;
+                    Capability.Environment.EnvironmentOverrideState |= EnvironmentOverrideState.Sky;
+                    didSkyChange = true;
+                }
+
                 using(var popup = ImRaii.Popup("sky_texture_selector"u8))
                 {
                     if(popup.Success)
@@ -134,6 +152,23 @@ public class SkyEditorWidget(SkyEditorCapability skyEditorCapability) : Widget<S
                 ImBrio.VerticalPadding(5);
                 didSkyChange |= ImGui.InputUInt("###SkyTextureID"u8, ref env->EnvState.SkyTextureID);
                 ImBrio.AttachToolTip("Sky Texture ID");
+
+                // Ctrl + mouse wheel on the Sky Texture ID input to cycle textures
+                var ioInput = ImGui.GetIO();
+                var ctrlScrollEnabledInput = true;
+                if(Brio.TryGetService(out global::Brio.Config.ConfigurationService? _cfgInput))
+                    ctrlScrollEnabledInput = _cfgInput.Configuration.Posing.EnableCtrlScrollWheel;
+                if(ctrlScrollEnabledInput && ImGui.IsItemHovered() && ioInput.KeyCtrl && Math.Abs(ioInput.MouseWheel) > 0.0f)
+                {
+                    var max = (int)_skyTextureSelector.MaxId;
+                    var current = (int)env->EnvState.SkyTextureID;
+                    var step = ioInput.MouseWheel > 0 ? 1 : -1;
+                    var next = (current + step) % (max + 1);
+                    if(next < 0) next += (max + 1);
+                    env->EnvState.SkyTextureID = (uint)next;
+                    Capability.Environment.EnvironmentOverrideState |= EnvironmentOverrideState.Sky;
+                    didSkyChange = true;
+                }
                
                 ImBrio.CenterNextElementWithPadding(15);
                 didSkyChange |= ImGui.SliderFloat("###fogSunVisibility"u8, ref env->EnvState.Fog.SunVisibility, 0.0f, 1f);
@@ -211,8 +246,25 @@ public class SkyEditorWidget(SkyEditorCapability skyEditorCapability) : Widget<S
                     ImGui.OpenPopup("cloud_texture_selector"u8);
                 }
                 ImBrio.AttachToolTip("Click to change Cloud Texture");
-               
+
                 var didSkyChange4 = false;
+
+                // Ctrl + mouse wheel on the cloud texture preview to cycle cloud textures
+                var ioCloudPreview = ImGui.GetIO();
+                var ctrlScrollEnabledCloudPreview = true;
+                if(Brio.TryGetService(out global::Brio.Config.ConfigurationService? _cfgCloudPreview))
+                    ctrlScrollEnabledCloudPreview = _cfgCloudPreview.Configuration.Posing.EnableCtrlScrollWheel;
+                if(ctrlScrollEnabledCloudPreview && ImGui.IsItemHovered() && ioCloudPreview.KeyCtrl && Math.Abs(ioCloudPreview.MouseWheel) > 0.0f)
+                {
+                    var max = (int)_cloudTextureSelector.MaxId;
+                    var current = (int)env->EnvState.Clouds.CloudTexture;
+                    var step = ioCloudPreview.MouseWheel > 0 ? 1 : -1;
+                    var next = (current + step) % (max + 1);
+                    if(next < 0) next += (max + 1);
+                    env->EnvState.Clouds.CloudTexture = (uint)next;
+                    Capability.Environment.EnvironmentOverrideState |= EnvironmentOverrideState.Clouds;
+                    didSkyChange4 = true;
+                }
 
                 using(var popup = ImRaii.Popup("cloud_texture_selector"u8))
                 {
@@ -238,12 +290,46 @@ public class SkyEditorWidget(SkyEditorCapability skyEditorCapability) : Widget<S
                 didSkyChange4 |= ImGui.InputUInt("###CloudTexture"u8, ref env->EnvState.Clouds.CloudTexture);
                 ImBrio.AttachToolTip("Cloud Texture ID");
 
+                // Ctrl + mouse wheel on the Cloud Texture ID input to cycle textures
+                var ioCloudInput = ImGui.GetIO();
+                var ctrlScrollEnabledCloudInput = true;
+                if(Brio.TryGetService(out global::Brio.Config.ConfigurationService? _cfgCloudInput))
+                    ctrlScrollEnabledCloudInput = _cfgCloudInput.Configuration.Posing.EnableCtrlScrollWheel;
+                if(ctrlScrollEnabledCloudInput && ImGui.IsItemHovered() && ioCloudInput.KeyCtrl && Math.Abs(ioCloudInput.MouseWheel) > 0.0f)
+                {
+                    var max = (int)_cloudTextureSelector.MaxId;
+                    var current = (int)env->EnvState.Clouds.CloudTexture;
+                    var step = ioCloudInput.MouseWheel > 0 ? 1 : -1;
+                    var next = (current + step) % (max + 1);
+                    if(next < 0) next += (max + 1);
+                    env->EnvState.Clouds.CloudTexture = (uint)next;
+                    Capability.Environment.EnvironmentOverrideState |= EnvironmentOverrideState.Clouds;
+                    didSkyChange4 = true;
+                }
+
                 if(ImBrio.BorderedGameTex("##cloudSideTexturePreview", _cloudSideTextureSelector.GetTexturePath(env->EnvState.Clouds.CloudSideTexture)))
                 {
                     _cloudSideTextureSelector.Select(new TextureId(env->EnvState.Clouds.CloudSideTexture));
                     ImGui.OpenPopup("cloud_side_texture_selector"u8);
                 }
                 ImBrio.AttachToolTip("Click to change Cloud Side Texture");
+
+                // Ctrl + mouse wheel on the cloud side texture preview to cycle cloud side textures
+                var ioCloudSidePreview = ImGui.GetIO();
+                var ctrlScrollEnabledCloudSidePreview = true;
+                if(Brio.TryGetService(out global::Brio.Config.ConfigurationService? _cfgCloudSidePreview))
+                    ctrlScrollEnabledCloudSidePreview = _cfgCloudSidePreview.Configuration.Posing.EnableCtrlScrollWheel;
+                if(ctrlScrollEnabledCloudSidePreview && ImGui.IsItemHovered() && ioCloudSidePreview.KeyCtrl && Math.Abs(ioCloudSidePreview.MouseWheel) > 0.0f)
+                {
+                    var max = (int)_cloudSideTextureSelector.MaxId;
+                    var current = (int)env->EnvState.Clouds.CloudSideTexture;
+                    var step = ioCloudSidePreview.MouseWheel > 0 ? 1 : -1;
+                    var next = (current + step) % (max + 1);
+                    if(next < 0) next += (max + 1);
+                    env->EnvState.Clouds.CloudSideTexture = (uint)next;
+                    Capability.Environment.EnvironmentOverrideState |= EnvironmentOverrideState.Clouds;
+                    didSkyChange4 = true;
+                }
 
                 using(var popup = ImRaii.Popup("cloud_side_texture_selector"u8))
                 {
@@ -268,6 +354,23 @@ public class SkyEditorWidget(SkyEditorCapability skyEditorCapability) : Widget<S
                 ImBrio.VerticalPadding(5);
                 didSkyChange4 |= ImGui.InputUInt("###CloudSideTexture"u8, ref env->EnvState.Clouds.CloudSideTexture);
                 ImBrio.AttachToolTip("Cloud Side Texture ID");
+
+                // Ctrl + mouse wheel on the Cloud Side Texture ID input to cycle textures
+                var ioCloudSideInput = ImGui.GetIO();
+                var ctrlScrollEnabledCloudSideInput = true;
+                if(Brio.TryGetService(out global::Brio.Config.ConfigurationService? _cfgCloudSideInput))
+                    ctrlScrollEnabledCloudSideInput = _cfgCloudSideInput.Configuration.Posing.EnableCtrlScrollWheel;
+                if(ctrlScrollEnabledCloudSideInput && ImGui.IsItemHovered() && ioCloudSideInput.KeyCtrl && Math.Abs(ioCloudSideInput.MouseWheel) > 0.0f)
+                {
+                    var max = (int)_cloudSideTextureSelector.MaxId;
+                    var current = (int)env->EnvState.Clouds.CloudSideTexture;
+                    var step = ioCloudSideInput.MouseWheel > 0 ? 1 : -1;
+                    var next = (current + step) % (max + 1);
+                    if(next < 0) next += (max + 1);
+                    env->EnvState.Clouds.CloudSideTexture = (uint)next;
+                    Capability.Environment.EnvironmentOverrideState |= EnvironmentOverrideState.Clouds;
+                    didSkyChange4 = true;
+                }
 
                 ImGui.Text("Cloud Color:"u8);
 

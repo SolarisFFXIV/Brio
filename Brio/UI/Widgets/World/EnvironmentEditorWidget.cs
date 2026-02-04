@@ -46,6 +46,7 @@ public class EnvironmentEditorWidget(EnvironmentEditorCapability capability) : W
                 ImGui.SetCursorPos(preservedPOS);
 
                 var path = $"bgcommon/nature/dust/texture/dust_{Math.Max(0, env->EnvState.Particles.TextureId - 2):D3}.tex";
+
                 if(ImBrio.BorderedGameTex("##particleTexturePreview", path))
                 {
                     _textureSelector.Select(new TextureId(env->EnvState.Particles.TextureId));
@@ -54,6 +55,23 @@ public class EnvironmentEditorWidget(EnvironmentEditorCapability capability) : W
                 ImBrio.AttachToolTip("Click to open texture selector");
 
                 bool didParticlesChange = false;
+
+                // Ctrl + mouse wheel on the particle texture preview to cycle particle textures
+                var ioPartPreview = ImGui.GetIO();
+                var ctrlScrollEnabledPartPreview = true;
+                if(Brio.TryGetService(out global::Brio.Config.ConfigurationService? _cfgPartPreview))
+                    ctrlScrollEnabledPartPreview = _cfgPartPreview.Configuration.Posing.EnableCtrlScrollWheel;
+                if(ctrlScrollEnabledPartPreview && ImGui.IsItemHovered() && ioPartPreview.KeyCtrl && Math.Abs(ioPartPreview.MouseWheel) > 0.0f)
+                {
+                    var max = (int)_textureSelector.MaxId;
+                    var current = (int)env->EnvState.Particles.TextureId;
+                    var step = ioPartPreview.MouseWheel > 0 ? 1 : -1;
+                    var next = (current + step) % (max + 1);
+                    if(next < 0) next += (max + 1);
+                    env->EnvState.Particles.TextureId = (uint)next;
+                    Capability.Environment.EnvironmentOverrideState |= EnvironmentOverrideState.Particles;
+                    didParticlesChange = true;
+                }
 
                 using(var popup = ImRaii.Popup("particle_texture_selector"u8))
                 {
@@ -78,6 +96,23 @@ public class EnvironmentEditorWidget(EnvironmentEditorCapability capability) : W
                 ImBrio.VerticalPadding(5);
                 didParticlesChange |= ImGui.InputUInt("###particleTexture"u8, ref env->EnvState.Particles.TextureId);
                 ImBrio.AttachToolTip("Particle Texture ID");
+
+                // Ctrl + mouse wheel on the Particle Texture ID input to cycle textures
+                var ioPartInput = ImGui.GetIO();
+                var ctrlScrollEnabledPartInput = true;
+                if(Brio.TryGetService(out global::Brio.Config.ConfigurationService? _cfgPartInput))
+                    ctrlScrollEnabledPartInput = _cfgPartInput.Configuration.Posing.EnableCtrlScrollWheel;
+                if(ctrlScrollEnabledPartInput && ImGui.IsItemHovered() && ioPartInput.KeyCtrl && Math.Abs(ioPartInput.MouseWheel) > 0.0f)
+                {
+                    var max = (int)_textureSelector.MaxId;
+                    var current = (int)env->EnvState.Particles.TextureId;
+                    var step = ioPartInput.MouseWheel > 0 ? 1 : -1;
+                    var next = (current + step) % (max + 1);
+                    if(next < 0) next += (max + 1);
+                    env->EnvState.Particles.TextureId = (uint)next;
+                    Capability.Environment.EnvironmentOverrideState |= EnvironmentOverrideState.Particles;
+                    didParticlesChange = true;
+                }
 
                 ImBrio.VerticalPadding(5);
                 ImGui.Text("Particle Properties:"u8);

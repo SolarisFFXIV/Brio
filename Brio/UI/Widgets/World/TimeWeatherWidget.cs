@@ -8,6 +8,7 @@ using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
 using System;
 using System.Numerics;
+using System.Linq;
 
 namespace Brio.UI.Widgets.World;
 
@@ -107,6 +108,30 @@ public class TimeWeatherWidget(TimeWeatherCapability weatherCapability) : Widget
             ImGui.OpenPopup("weather_selector"u8);
         }
 
+        // Also allow Ctrl + mouse wheel on the weather icon selector to cycle weathers
+        var ioIcon = ImGui.GetIO();
+        var ctrlScrollEnabledIcon = true;
+        if(Brio.TryGetService(out global::Brio.Config.ConfigurationService? _cfgIcon))
+            ctrlScrollEnabledIcon = _cfgIcon.Configuration.Posing.EnableCtrlScrollWheel;
+        if(ctrlScrollEnabledIcon && ImGui.IsItemHovered() && ioIcon.KeyCtrl && Math.Abs(ioIcon.MouseWheel) > 0.0f)
+        {
+            var list = Capability.EnvironmentService.TerritoryWeatherTable.ToList();
+            if(list == null || list.Count == 0)
+                list = Capability.EnvironmentService.AllWeatherCollection.OrderBy(w => w.RowId).ToList();
+
+            if(list != null && list.Count > 0)
+            {
+                var idx = list.FindIndex(w => (int)w.RowId == currentWeather);
+                if(idx < 0) idx = -1;
+
+                var step = ioIcon.MouseWheel > 0 ? 1 : -1;
+                idx = (idx + step) % list.Count;
+                if(idx < 0) idx += list.Count;
+
+                currentWeather = (int)list[idx].RowId;
+            }
+        }
+
         var startAt = ImGui.GetCursorPos();       
 
         ImGui.SameLine();
@@ -115,6 +140,31 @@ public class TimeWeatherWidget(TimeWeatherCapability weatherCapability) : Widget
         ImBrio.VerticalPadding(5);
         ImGui.InputInt("###current_weather_input"u8, ref currentWeather, 0, 0, default, ImGuiInputTextFlags.EnterReturnsTrue);
         ImBrio.AttachToolTip("Weather ID");
+
+        // Allow Ctrl + mouse wheel over the Weather ID input to cycle available weathers
+        var io = ImGui.GetIO();
+        var ctrlScrollEnabledInput = true;
+        if(Brio.TryGetService(out global::Brio.Config.ConfigurationService? _cfgInput))
+            ctrlScrollEnabledInput = _cfgInput.Configuration.Posing.EnableCtrlScrollWheel;
+        if(ctrlScrollEnabledInput && ImGui.IsItemHovered() && io.KeyCtrl && Math.Abs(io.MouseWheel) > 0.0f)
+        {
+            var list = Capability.EnvironmentService.TerritoryWeatherTable.ToList();
+            if(list == null || list.Count == 0)
+                list = Capability.EnvironmentService.AllWeatherCollection.OrderBy(w => w.RowId).ToList();
+
+            if(list != null && list.Count > 0)
+            {
+                var idx = list.FindIndex(w => (int)w.RowId == currentWeather);
+                // if not found, start from -1 so next becomes 0 when scrolling up
+                if(idx < 0) idx = -1;
+
+                var step = io.MouseWheel > 0 ? 1 : -1;
+                idx = (idx + step) % list.Count;
+                if(idx < 0) idx += list.Count;
+
+                currentWeather = (int)list[idx].RowId;
+            }
+        }
       
         using(var popup = ImRaii.Popup("weather_selector"u8))
         {

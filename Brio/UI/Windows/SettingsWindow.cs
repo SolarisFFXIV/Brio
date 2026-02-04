@@ -143,6 +143,16 @@ public class SettingsWindow : Window
                 _configurationService.ApplyChange();
             }
 
+            bool enableCtrlScroll = _configurationService.Configuration.Posing.EnableCtrlScrollWheel;
+            if(ImGui.Checkbox("Enable Ctrl+Scroll Wheel Shortcuts", ref enableCtrlScroll))
+            {
+                _configurationService.Configuration.Posing.EnableCtrlScrollWheel = enableCtrlScroll;
+                _configurationService.ApplyChange();
+            }
+
+            if(ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, holding Ctrl and using the mouse wheel over certain UI elements will trigger shortcut behavior (e.g., cycle textures/weather).\nDisable to turn these shortcuts off.");
+
             bool enableMirrorMultiBoneHotkey = _configurationService.Configuration.Posing.EnableMirrorMultiBoneHotkey;
             if(ImGui.Checkbox("Enable Mirror Multi-Bone Gizmo Hotkey", ref enableMirrorMultiBoneHotkey))
             {

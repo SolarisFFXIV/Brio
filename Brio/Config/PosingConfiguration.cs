@@ -27,6 +27,8 @@ public class PosingConfiguration
     public bool HideSkeletonWhenGizmoActive { get; set; } = false;
     public bool DisableScrollWheelGizmoAndValueChanges { get; set; } = false;
     public bool EnableMirrorMultiBoneHotkey { get; set; } = false;
+    // Enable or disable all Ctrl+ScrollWheel shortcuts across Brio (enabled by default)
+    public bool EnableCtrlScrollWheel { get; set; } = true;
 
     public bool ModelTransformStandout { get; set; } = true;
     public uint ModelTransformCircleStandOutColor { get; set; } = 0xFFE02B70;
