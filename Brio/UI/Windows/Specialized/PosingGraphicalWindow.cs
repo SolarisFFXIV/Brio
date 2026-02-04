@@ -162,7 +162,10 @@ public class PosingGraphicalWindow : Window, IDisposable
                 DrawButtons(posing);
                 ImGui.Separator();
 
-                float height = ImBrio.GetRemainingHeight() - ImBrio.GetLineHeight() - (ImGui.GetStyle().FramePadding.Y * 2);
+                var style = ImGui.GetStyle();
+                float buttonRowHeight = ImGui.GetFrameHeight();
+                float reservedHeight = (buttonRowHeight * 2) + (style.ItemSpacing.Y * 3) + (style.FramePadding.Y * 2);
+                float height = MathF.Max(0, ImBrio.GetRemainingHeight() - reservedHeight);
 
                 using(var rightPaneSelection = ImRaii.Child("###right_pane_selection", new Vector2(-1, height), true, ImGuiWindowFlags.AlwaysVerticalScrollbar))
                 {
@@ -352,6 +355,70 @@ public class PosingGraphicalWindow : Window, IDisposable
 
         if(ImBrio.Button("Export##export_pose", FontAwesomeIcon.Save, buttonSize))
             FileUIHelpers.ShowExportPoseModal(posing);
+
+        ImGui.Spacing();
+
+        var nextActorUp = GetNextActorName(-1);
+        if(ImBrio.Button($"< {nextActorUp}##posing_extra_1", FontAwesomeIcon.None, buttonSize))
+        {
+            CycleSelectedActor(-1);
+        }
+
+        ImGui.SameLine();
+
+        var nextActorDown = GetNextActorName(1);
+        if(ImBrio.Button($"{nextActorDown} >##posing_extra_2", FontAwesomeIcon.None, buttonSize))
+        {
+            CycleSelectedActor(1);
+        }
+    }
+
+    private void CycleSelectedActor(int direction)
+    {
+        var root = _entityManager.RootEntity;
+        if(root == null)
+            return;
+
+        var actorContainer = root.Children.OfType<ActorContainerEntity>().FirstOrDefault();
+        if(actorContainer == null)
+            return;
+
+        var actors = actorContainer.Children.OfType<ActorEntity>().ToList();
+        if(actors.Count == 0)
+            return;
+
+        var currentActor = _entityManager.SelectedEntity as ActorEntity;
+        var currentIndex = currentActor == null ? -1 : actors.FindIndex(actor => actor.Id.Equals(currentActor.Id));
+
+        if(currentIndex < 0)
+            currentIndex = 0;
+
+        var nextIndex = (currentIndex + direction + actors.Count) % actors.Count;
+        _entityManager.SetSelectedEntity(actors[nextIndex]);
+    }
+
+    private string GetNextActorName(int direction)
+    {
+        var root = _entityManager.RootEntity;
+        if(root == null)
+            return "";
+
+        var actorContainer = root.Children.OfType<ActorContainerEntity>().FirstOrDefault();
+        if(actorContainer == null)
+            return "";
+
+        var actors = actorContainer.Children.OfType<ActorEntity>().ToList();
+        if(actors.Count == 0)
+            return "";
+
+        var currentActor = _entityManager.SelectedEntity as ActorEntity;
+        var currentIndex = currentActor == null ? -1 : actors.FindIndex(actor => actor.Id.Equals(currentActor.Id));
+
+        if(currentIndex < 0)
+            currentIndex = 0;
+
+        var nextIndex = (currentIndex + direction + actors.Count) % actors.Count;
+        return actors[nextIndex].FriendlyName;
     }
 
     private unsafe void DrawGizmo()

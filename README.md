@@ -6,6 +6,7 @@
 
 ### New Features
 - **Customizable Scroll Bar Size**: Added slider in Solaris tab to adjust the size of scroll bars that appear in the main Brio window when it overflows with widgets. Range from default size (9.0) up to 3 times the default (27.0).
+- **Advanced Posing Actor Cycling Buttons**: Added buttons in the Advanced Posing window to cycle between actors.
 
 ## Version 2 Changelog
 
