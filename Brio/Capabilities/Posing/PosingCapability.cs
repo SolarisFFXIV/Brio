@@ -488,7 +488,7 @@ public class PosingCapability : ActorCharacterCapability
 
             if(bone == null) continue;
 
-            if(bone.Name.Contains("iv_shiri") || bone.Name.Contains("iv_kougan"))
+            if(bone.Name.Contains("iv_shiri") || bone.Name.Contains("iv_kougan") || bone.Name.Contains("j_ex"))
             {
                 continue;
             }
