@@ -43,7 +43,7 @@ public static class SpawnMenuEditor
 
                 if(ImBrio.DrawIconButton(FontAwesomeIcon.PlusSquare, "Spawn with Companion Slot", buttonSize))
                 {
-                    actorSpawnService.CreateCharacter(out _, SpawnFlags.ReserveCompanionSlot, false);
+                    actorSpawnService.CreateCharacter(out _, SpawnFlags.WithCompanionSlot, false);
                     ImGui.CloseCurrentPopup();
                 }
 

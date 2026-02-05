@@ -422,6 +422,7 @@ public enum SpawnFlags
     IsEffect = 1 << 8,
     SetDefaultAppearance = 1 << 16,
 
+    WithCompanionSlot = ReserveCompanionSlot | CopyPosition,
     Prop = IsProp | SetDefaultAppearance | CopyPosition,
     Effect = IsEffect | SetDefaultAppearance | CopyPosition,
     Default = CopyPosition,
