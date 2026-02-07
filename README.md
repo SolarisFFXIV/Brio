@@ -7,6 +7,8 @@
 ### New Features
 - **Light direction visualization**: When a light is selected, the overlay draws a yellow line showing the light's forward direction so you can quickly see where the light is pointing.
 
+Merged in changes from Brio v0.7.1.2
+
 ## Version 3 Changelog
 
 ### New Features
