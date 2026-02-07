@@ -9,11 +9,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
 using OneOf.Types;
-<<<<<<< update-v0.7.1.2
 using System.Collections.Generic;
-using System.Numerics;
-=======
->>>>>>> 7cc5c0b run code cleanup
 using System.Linq;
 using System.Numerics;
 
@@ -191,12 +187,7 @@ public static class PosingEditorCommon
                         }
                     }
                 }
-<<<<<<< update-v0.7.1.2
                 else
-=======
-
-                if(ImGui.IsItemHovered() && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
->>>>>>> 7cc5c0b run code cleanup
                 {
                     if(tristateCheckbox.Draw(category.Name, ref tristateValue))
                     {

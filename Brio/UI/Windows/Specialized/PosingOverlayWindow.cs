@@ -117,14 +117,10 @@ public class PosingOverlayWindow : Window, IDisposable
 
         DrawActorSelectionDots(overlayConfig, uiState);
 
-<<<<<<< update-v0.7.1.2
         if(_posingService.ShowBonesForAllVisibleActors)
         {
             DrawOtherActorBones(posing, uiState, overlayConfig);
         }
-        
-=======
->>>>>>> 7cc5c0b run code cleanup
         DrawActorContent(posing, uiState, overlayConfig);
 
         //var pos = ImGui.GetMousePos();

@@ -26,13 +26,9 @@ public class TextureSelector : Selector<TextureId>
     private readonly TextureType _textureType;
     private readonly uint _maxId;
 
-<<<<<<< update-v0.7.1.2
     public uint MaxId => _maxId;
 
-    protected override Vector2 MinimumListSize { get; } = new( 200, 400);
-=======
     protected override Vector2 MinimumListSize { get; } = new(200, 400);
->>>>>>> 7cc5c0b run code cleanup
 
     protected override float EntrySize => ImGui.GetTextLineHeight() * 3.2f;
     protected virtual Vector2 IconSize => new(ImGui.GetTextLineHeight() * 3f);
