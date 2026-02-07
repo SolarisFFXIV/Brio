@@ -51,7 +51,7 @@ public class ActorDynamicPoseWidget(ActorDynamicPoseCapability capability) : Wid
         using(ImRaii.Disabled(!Capability.IsEnabled))
         {
             ImGui.Separator();
-         
+
             ImBrio.VerticalPadding(5);
 
             if(ImBrio.ButtonSelectorStrip("DynamicFaceControlSelector", new Vector2(ImBrio.GetRemainingWidth(), ImBrio.GetLineHeight()), ref selected, ["Camera", "Position", "Actor"]))
@@ -73,8 +73,8 @@ public class ActorDynamicPoseWidget(ActorDynamicPoseCapability capability) : Wid
                         break;
                 }
             }
-           
-          
+
+
             switch(selected)
             {
                 case 0:

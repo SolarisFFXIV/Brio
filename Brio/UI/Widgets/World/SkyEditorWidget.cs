@@ -153,6 +153,7 @@ public class SkyEditorWidget(SkyEditorCapability skyEditorCapability) : Widget<S
                 didSkyChange |= ImGui.InputUInt("###SkyTextureID"u8, ref env->EnvState.SkyTextureID);
                 ImBrio.AttachToolTip("Sky Texture ID");
 
+<<<<<<< update-v0.7.1.2
                 // Ctrl + mouse wheel on the Sky Texture ID input to cycle textures
                 var ioInput = ImGui.GetIO();
                 var ctrlScrollEnabledInput = true;
@@ -170,6 +171,8 @@ public class SkyEditorWidget(SkyEditorCapability skyEditorCapability) : Widget<S
                     didSkyChange = true;
                 }
                
+=======
+>>>>>>> 7cc5c0b run code cleanup
                 ImBrio.CenterNextElementWithPadding(15);
                 didSkyChange |= ImGui.SliderFloat("###fogSunVisibility"u8, ref env->EnvState.Fog.SunVisibility, 0.0f, 1f);
                 ImBrio.AttachToolTip("Sun Visibility");

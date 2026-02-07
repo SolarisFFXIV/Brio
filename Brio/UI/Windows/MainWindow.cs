@@ -112,7 +112,7 @@ public class MainWindow : Window, IDisposable
             using(ImRaii.PushColor(ImGuiCol.Text, UIConstants.GizmoRed))
                 ImGui.Text("Open GPose to use Brio!");
         }
-      
+
         var rootEntity = _entityManager.RootEntity;
         if(rootEntity is null)
             return;

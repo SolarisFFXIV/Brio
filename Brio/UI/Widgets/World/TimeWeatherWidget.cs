@@ -92,7 +92,7 @@ public class TimeWeatherWidget(TimeWeatherCapability weatherCapability) : Widget
             none => ImGui.Text("Unknown Weather"u8)
         );
         ImBrio.VerticalPadding(5);
-       
+
         var preservePos = ImGui.GetCursorPos();
 
         ImGui.SetCursorPos(unlockPos);
@@ -108,6 +108,7 @@ public class TimeWeatherWidget(TimeWeatherCapability weatherCapability) : Widget
             ImGui.OpenPopup("weather_selector"u8);
         }
 
+<<<<<<< update-v0.7.1.2
         // Also allow Ctrl + mouse wheel on the weather icon selector to cycle weathers
         var ioIcon = ImGui.GetIO();
         var ctrlScrollEnabledIcon = true;
@@ -133,6 +134,9 @@ public class TimeWeatherWidget(TimeWeatherCapability weatherCapability) : Widget
         }
 
         var startAt = ImGui.GetCursorPos();       
+=======
+        var startAt = ImGui.GetCursorPos();
+>>>>>>> 7cc5c0b run code cleanup
 
         ImGui.SameLine();
 
@@ -141,6 +145,7 @@ public class TimeWeatherWidget(TimeWeatherCapability weatherCapability) : Widget
         ImGui.InputInt("###current_weather_input"u8, ref currentWeather, 0, 0, default, ImGuiInputTextFlags.EnterReturnsTrue);
         ImBrio.AttachToolTip("Weather ID");
 
+<<<<<<< update-v0.7.1.2
         // Allow Ctrl + mouse wheel over the Weather ID input to cycle available weathers
         var io = ImGui.GetIO();
         var ctrlScrollEnabledInput = true;
@@ -166,6 +171,8 @@ public class TimeWeatherWidget(TimeWeatherCapability weatherCapability) : Widget
             }
         }
       
+=======
+>>>>>>> 7cc5c0b run code cleanup
         using(var popup = ImRaii.Popup("weather_selector"u8))
         {
             if(popup.Success)
