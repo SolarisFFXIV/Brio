@@ -4,6 +4,12 @@
 
 ## Version 3 Changelog
 
+## Version 4 Changelog
+
+### New Features
+- **Light direction visualization**: When a light is selected, the overlay draws a yellow line showing the light's forward direction so you can quickly see where the light is pointing.
+
+
 ### New Features
 - **Customizable Scroll Bar Size**: Added slider in Solaris tab to adjust the size of scroll bars that appear in the main Brio window when it overflows with widgets. Range from default size (9.0) up to 3 times the default (27.0).
 - **Advanced Posing Actor Cycling Buttons**: Added buttons in the Advanced Posing window to cycle between actors.

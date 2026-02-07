@@ -894,7 +894,6 @@ public class PosingOverlayWindow : Window, IDisposable
         }
 
         ImGuizmo.Enable(true);
-
         if(newTransform != null)
         {
             var delta = newTransform.Value.CalculateDiff(lastObserved);
@@ -906,6 +905,35 @@ public class PosingOverlayWindow : Window, IDisposable
 
             if(ImGuizmo.IsUsing() is false)
                 lightTransformCapability.Snapshot();
+        }
+
+        // If this light is the currently selected one, draw a yellow direction line
+        if(_lightingService.SelectedLightEntity is not null && _lightingService.SelectedLightEntity == lightTransformCapability.Entity)
+        {
+            try
+            {
+                var start = currentTransform.Position;
+
+                // Compute forward vector from rotation (assume +Z is forward)
+                var rot = currentTransform.Rotation;
+                var forward = Vector3.Transform(new Vector3(0, 0, 1), rot);
+                if(forward.LengthSquared() > 0.0001f)
+                    forward = Vector3.Normalize(forward);
+
+                // Use light range if available, otherwise a default length
+                float length = 5f;
+                if(lightTransformCapability.GameLight.GameLight->LightRenderObject != null)
+                {
+                    var lr = lightTransformCapability.GameLight.GameLight->LightRenderObject->Range;
+                    if(lr > 0)
+                        length = lr;
+                }
+
+                var end = start + forward * length;
+
+                DrawLineWorld(start, end, EColor.YellowBright.ToUint(), 2f);
+            }
+            catch { }
         }
 
         ImGuizmo.SetID(_gizmoId);
