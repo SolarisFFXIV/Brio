@@ -3,8 +3,11 @@ using Brio.Entities;
 using Brio.Entities.Core;
 using Brio.Game.Core;
 using Brio.Game.GPose;
+<<<<<<< update-v0.7.1.2
 using Brio.Game.Scene;
 using Brio.Game.World;
+=======
+>>>>>>> c37ea0e Move SceneService to Services
 using Brio.MCDF.Game.Services;
 using Brio.Services;
 using Brio.UI.Controls.Core;
